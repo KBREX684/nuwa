@@ -646,7 +646,9 @@ function nuwa() {
     },
     get currentStageLabel() {
       const s = this.stages.find(s => s.status === 'active');
-      return s ? s.label : (this.status === 'completed' ? '完成' : '等待中');
+      if (s) return s.label;
+      if (this.status === 'running') return '执行中';
+      return this.status === 'completed' ? '完成' : '等待中';
     },
 
     /* --- lifecycle --- */
