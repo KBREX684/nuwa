@@ -475,9 +475,12 @@ class TestSDKTrainerWithSandbox:
 
         result = await trainer.run()
         assert isinstance(result, TrainingResult)
+        assert result.sandbox_session_id is not None
 
         # Capture config before promote
         pre_promote = trainer._target.get_current_config()
+        # In sandbox mode, trainer run must not mutate the real target config.
+        assert pre_promote == trainer.original_config
 
         # Promote
         promoted = trainer.promote()

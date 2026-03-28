@@ -33,6 +33,7 @@ from nuwa.guardrails.consistency import ConsistencyGuardrail
 from nuwa.guardrails.overfitting import OverfittingGuardrail
 from nuwa.guardrails.regression import RegressionGuardrail
 from nuwa.llm.backend import LiteLLMBackend
+from nuwa.sandbox.manager import SandboxManager
 from nuwa.sdk.decorator import NuwaMeta
 
 logger = logging.getLogger(__name__)
@@ -186,6 +187,15 @@ class NuwaTrainer:
         if on_round_end is not None:
             self._callbacks.append(on_round_end)
 
+        # Optional sandbox manager. When enabled, TrainingLoop will train
+        # against an isolated config copy and keep the real target untouched.
+        self._sandbox_manager: SandboxManager | None = None
+        if self._sandbox:
+            self._sandbox_manager = SandboxManager(
+                self._target,
+                project_dir=self._project_dir,
+            )
+
         # Result placeholder -- populated after run().
         self._result: TrainingResult | None = None
 
@@ -209,6 +219,7 @@ class NuwaTrainer:
             target=self._target,
             guardrails=self._guardrails,
             callbacks=self._callbacks,
+            sandbox=self._sandbox_manager,
         )
 
         logger.info(

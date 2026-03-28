@@ -4,6 +4,7 @@ Entry points
 ------------
 - ``nuwa train``   -- interactive training session
 - ``nuwa run``     -- headless training from a config file
+- ``nuwa web``     -- launch the web dashboard server
 - ``nuwa status``  -- show last training run results
 - ``nuwa init``    -- generate a default config file
 """
@@ -14,7 +15,6 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -249,6 +249,29 @@ def run_cmd(
 
     # Display final results
     renderer.approval_panel(result)
+
+
+# ------------------------------------------------------------------
+# web
+# ------------------------------------------------------------------
+
+@app.command("web")
+def web_cmd(
+    host: str = typer.Option("0.0.0.0", "--host", help="Web 服务监听地址。"),
+    port: int = typer.Option(8080, "--port", "-p", help="Web 服务端口。"),
+    reload: bool = typer.Option(False, "--reload", help="启用自动重载（开发模式）。"),
+) -> None:
+    """启动 Nuwa Web 控制台。"""
+    try:
+        import uvicorn
+    except ImportError:
+        typer.echo(
+            "缺少 Web 依赖，请先安装: pip install 'nuwa-trainer[web]'",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    uvicorn.run("nuwa.web.server:app", host=host, port=port, reload=reload)
 
 
 # ------------------------------------------------------------------
