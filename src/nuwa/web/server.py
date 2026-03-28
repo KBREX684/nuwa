@@ -13,6 +13,7 @@ import logging
 import os
 import re
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -107,7 +108,38 @@ class ApproveRequest(BaseModel):
 # FastAPI application
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Nuwa Training Dashboard", version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Startup: ensure project dir.  Shutdown: cancel running tasks."""
+    # --- Startup ---
+    project_dir = Path(".nuwa")
+    project_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Nuwa project directory ensured at %s", project_dir.resolve())
+
+    yield
+
+    # --- Shutdown ---
+    task = cast(asyncio.Task[Any] | None, _state.get("training_task"))
+    if task is not None and not task.done():
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=5.0)
+        except (asyncio.CancelledError, TimeoutError):
+            pass
+
+    q = cast(asyncio.Queue[dict[str, Any]] | None, _state.get("event_queue"))
+    if q is not None:
+        while not q.empty():
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+    logger.info("Nuwa server shutdown complete.")
+
+
+app = FastAPI(title="Nuwa Training Dashboard", version="0.1.0", lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 # CORS — origins read from NUWA_CORS_ORIGINS (comma-separated).
@@ -165,43 +197,6 @@ def _safe_error(exc: Exception, status_code: int = 400) -> JSONResponse:
     """Return a generic error to the client; log the real exception."""
     logger.exception("Request failed: %s", exc)
     return JSONResponse({"error": "Request failed. Check server logs for details."}, status_code=status_code)
-
-# ---------------------------------------------------------------------------
-# Startup
-# ---------------------------------------------------------------------------
-
-
-@app.on_event("startup")
-async def _on_startup() -> None:
-    """Create the .nuwa project directory on startup."""
-    project_dir = Path(".nuwa")
-    project_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("Nuwa project directory ensured at %s", project_dir.resolve())
-
-
-@app.on_event("shutdown")
-async def _on_shutdown() -> None:
-    """Gracefully clean up on server shutdown."""
-    # Cancel running training task.
-    task = cast(asyncio.Task[Any] | None, _state.get("training_task"))
-    if task is not None and not task.done():
-        task.cancel()
-        try:
-            await asyncio.wait_for(task, timeout=5.0)
-        except (asyncio.CancelledError, TimeoutError):
-            pass
-
-    # Flush event queue.
-    q = cast(asyncio.Queue[dict[str, Any]] | None, _state.get("event_queue"))
-    if q is not None:
-        while not q.empty():
-            try:
-                q.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-
-    logger.info("Nuwa server shutdown complete.")
-
 
 # ---------------------------------------------------------------------------
 # Helpers

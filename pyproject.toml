@@ -54,6 +54,7 @@ nuwa = "nuwa.cli:app"
 Homepage = "https://github.com/KBREX684/nuwa"
 Repository = "https://github.com/KBREX684/nuwa"
 Issues = "https://github.com/KBREX684/nuwa/issues"
+Changelog = "https://github.com/KBREX684/nuwa/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nuwa"]

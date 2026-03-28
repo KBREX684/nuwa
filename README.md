@@ -6,7 +6,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
-[![PyPI](https://img.shields.io/badge/PyPI-nuwa--trainer-orange?logo=pypi&logoColor=white)](https://pypi.org/project/nuwa-trainer/)
+[![GitHub](https://img.shields.io/badge/GitHub-KBREX684%2Fnuwa-black?logo=github)](https://github.com/KBREX684/nuwa)
 
 [中文](#什么是女娲) | [English](#what-is-nuwa)
 
@@ -81,7 +81,15 @@ Inspired by automated research frameworks: let an agent handle the work of tunin
 ### 安装 / Install
 
 ```bash
-pip install nuwa-trainer
+pip install git+https://github.com/KBREX684/nuwa.git
+```
+
+或克隆后本地安装：
+
+```bash
+git clone https://github.com/KBREX684/nuwa.git
+cd nuwa
+pip install -e .
 ```
 
 > **License note:** BSL 1.1 — free for development and evaluation. [Commercial license](LICENSE) required for production use.

@@ -376,7 +376,13 @@ class LoopContext(BaseModel):
 
     # -- cross-round state -------------------------------------------------
     history: list[RoundResult] = Field(default_factory=list)
-    max_history_size: int = Field(default=100, ge=1, help="Cap history size to prevent unbounded memory growth in long training runs.")
+    max_history_size: int = Field(
+        default=100,
+        ge=1,
+        json_schema_extra={
+            "help": "Cap history size to prevent unbounded memory growth in long training runs."
+        },
+    )
     current_config: dict[str, Any] = Field(default_factory=dict)
     best_config: dict[str, Any] = Field(default_factory=dict)
     best_val_score: float = Field(default=0.0, ge=0.0, le=1.0)
