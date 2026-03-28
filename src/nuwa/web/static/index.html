@@ -722,9 +722,6 @@ function nuwa() {
     async startTraining(demo) {
       if (this.status === 'running') return;
       this.resetState();
-      this.status = 'running';
-      this.view = 'monitor';
-      this.startTimer();
 
       if (!demo) {
         const model = this.cfg.llm_model === 'custom' ? this.cfg.llm_model_custom : this.cfg.llm_model;
@@ -743,42 +740,77 @@ function nuwa() {
           consistency_threshold: this.cfg.consistency_threshold,
         };
         try {
-          await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-          await fetch('/api/train/start', { method: 'POST' });
+          const configResp = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!configResp.ok) {
+            throw new Error(await this.readApiError(configResp, '保存配置失败'));
+          }
+          const startResp = await fetch('/api/train/start', { method: 'POST' });
+          if (!startResp.ok) {
+            throw new Error(await this.readApiError(startResp, '启动训练失败'));
+          }
         } catch (e) {
-          this.addLog('配置或启动失败: ' + e.message);
+          this.addLog('配置或启动失败: ' + (e?.message || e));
           this.status = 'error';
+          this.view = 'setup';
           this.stopTimer();
           return;
         }
       } else {
         try {
-          await fetch('/api/demo/start', { method: 'POST' });
+          const demoResp = await fetch('/api/demo/start', { method: 'POST' });
+          if (!demoResp.ok) {
+            throw new Error(await this.readApiError(demoResp, '演示启动失败'));
+          }
         } catch (e) {
-          this.addLog('演示启动失败: ' + e.message);
+          this.addLog('演示启动失败: ' + (e?.message || e));
           this.status = 'error';
+          this.view = 'setup';
           this.stopTimer();
           return;
         }
       }
+
+      this.status = 'running';
+      this.view = 'monitor';
+      this.startTimer();
       this.$nextTick(() => this.initCharts());
       this.connectSSE();
     },
 
     async stopTraining() {
-      try { await fetch('/api/train/stop', { method: 'POST' }); } catch (e) {}
-      this.addLog('已请求停止训练');
+      try {
+        const resp = await fetch('/api/train/stop', { method: 'POST' });
+        if (!resp.ok) {
+          throw new Error(await this.readApiError(resp, '停止训练失败'));
+        }
+        this.addLog('已请求停止训练');
+      } catch (e) {
+        this.addLog('停止训练失败: ' + (e?.message || e));
+      }
     },
 
     async approve(decision) {
       const body = { decision, extra_rounds: this.extraRounds };
       try {
         const r = await fetch('/api/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const d = await r.json();
+        if (!r.ok) {
+          throw new Error(await this.readApiError(r, '提交审核决策失败'));
+        }
         if (decision === 'accept') { this.addLog('已采纳优化结果'); alert('优化结果已采纳并保存！'); }
         else if (decision === 'reject') { this.addLog('已拒绝优化结果'); this.result = null; this.view = 'setup'; }
-        else if (decision === 'extend') { this.addLog('追加 ' + this.extraRounds + ' 轮训练'); this.view = 'monitor'; }
-      } catch (e) { this.addLog('操作失败: ' + e.message); }
+        else if (decision === 'extend') {
+          this.resetState();
+          this.status = 'running';
+          this.view = 'monitor';
+          this.startTimer();
+          this.connectSSE();
+          this.addLog('追加 ' + this.extraRounds + ' 轮训练');
+        }
+      } catch (e) { this.addLog('操作失败: ' + (e?.message || e)); }
     },
 
     /* --- SSE --- */
@@ -873,6 +905,16 @@ function nuwa() {
     },
 
     /* --- helpers --- */
+    async readApiError(resp, fallbackMsg) {
+      try {
+        const data = await resp.json();
+        if (data && typeof data === 'object' && data.error) {
+          return String(data.error);
+        }
+      } catch (_) {}
+      return `${fallbackMsg} (HTTP ${resp.status})`;
+    },
+
     resetState() {
       this.currentRound = 0;
       this.currentStage = '';

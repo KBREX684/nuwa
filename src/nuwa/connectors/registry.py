@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+from collections.abc import Callable
 from typing import Any, cast
 
 from nuwa.core.exceptions import ConfigError
@@ -46,6 +47,30 @@ def _import_class(dotted: str) -> type[Any]:
     return cast(type[Any], cls)
 
 
+def _resolve_callable_ref(ref: str | Callable[..., Any]) -> Callable[..., Any]:
+    """Resolve a ``module.path:callable`` reference into a Python callable."""
+    if callable(ref):
+        return ref
+    if not isinstance(ref, str) or ":" not in ref:
+        raise ConfigError(
+            "Function connector expects a callable or 'module.path:callable' string."
+        )
+    module_path, _, attr_name = ref.rpartition(":")
+    if not module_path or not attr_name:
+        raise ConfigError(f"Invalid callable reference: {ref!r}")
+    module = importlib.import_module(module_path)
+    obj = getattr(module, attr_name, None)
+    if obj is None:
+        raise ConfigError(
+            f"Callable {attr_name!r} not found in module {module_path!r}."
+        )
+    if not callable(obj):
+        raise ConfigError(
+            f"Resolved object {module_path}:{attr_name} is not callable."
+        )
+    return cast(Callable[..., Any], obj)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -84,6 +109,17 @@ def create_connector(connector_type: str, **params: Any) -> Any:
         )
 
     cls = _import_class(dotted)
+    if connector_type == "function":
+        # Web UI and YAML configs commonly provide a module reference string;
+        # normalise to the callable expected by FunctionCallAdapter(func=...).
+        if "func" not in params:
+            if "module" in params:
+                params = dict(params)
+                params["func"] = _resolve_callable_ref(params.pop("module"))
+            elif "callable" in params:
+                params = dict(params)
+                params["func"] = _resolve_callable_ref(params.pop("callable"))
+
     try:
         instance = cls(**params)
     except TypeError as exc:

@@ -86,8 +86,8 @@ class ConfigRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     """POST /api/approve request body."""
-    decision: str  # "accept" | "reject" | "extend"
-    extra_rounds: int = 5
+    decision: Literal["accept", "reject", "extend"]
+    extra_rounds: int = Field(default=5, ge=1)
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +307,17 @@ async def _run_training(
             "stop_reason": result.stop_reason,
         })
 
+    except asyncio.CancelledError:
+        logger.info("Training cancelled by user request")
+        _state["training_status"] = "completed"
+        _state["current_stage"] = "stopped"
+        _push_event({
+            "type": "training_complete",
+            "best_round": 0,
+            "best_score": 0.0,
+            "stop_reason": "stopped by user",
+        })
+
     except Exception as exc:
         logger.exception("Training failed")
         _state["training_status"] = "error"
@@ -464,7 +475,8 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
                 {"error": "No training result to accept."}, status_code=400,
             )
         # Save the final config to disk
-        project_dir = Path(".nuwa")
+        cfg = cast(NuwaConfig | None, _state.get("current_config"))
+        project_dir = Path(cfg.project_dir) if cfg is not None else Path(".nuwa")
         project_dir.mkdir(parents=True, exist_ok=True)
         config_path = project_dir / "accepted_config.json"
         config_path.write_text(
@@ -491,7 +503,7 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
             )
         # Update max_rounds and restart
         extended_cfg = cfg.model_copy(
-            update={"max_rounds": body.extra_rounds},
+            update={"max_rounds": cfg.max_rounds + body.extra_rounds},
         )
         _state["current_config"] = extended_cfg
         _reset_state()
@@ -507,13 +519,6 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
         task = asyncio.create_task(_run_training(extended_cfg, backend, target))
         _state["training_task"] = task
         return JSONResponse({"ok": True})
-
-    else:
-        return JSONResponse(
-            {"error": f"Unknown decision: {body.decision!r}"},
-            status_code=400,
-        )
-
 
 # ---------------------------------------------------------------------------
 # Endpoint: GET /api/history
@@ -726,9 +731,14 @@ async def _run_demo_training() -> None:
         })
 
     except asyncio.CancelledError:
-        _state["training_status"] = "error"
-        _state["error_message"] = "Demo training cancelled."
-        _push_event({"type": "error", "message": "Demo training cancelled."})
+        _state["training_status"] = "completed"
+        _state["error_message"] = None
+        _push_event({
+            "type": "training_complete",
+            "best_round": 0,
+            "best_score": 0.0,
+            "stop_reason": "stopped by user",
+        })
     except Exception as exc:
         logger.exception("Demo training failed")
         _state["training_status"] = "error"
@@ -757,6 +767,10 @@ async def demo_start() -> JSONResponse:
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 
+# Mount static files before SPA fallback so `/static/*` keeps proper 404 semantics.
+if _STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
 async def _spa_fallback(full_path: str) -> Any:
@@ -770,11 +784,6 @@ async def _spa_fallback(full_path: str) -> Any:
     if index.is_file():
         return FileResponse(index)
     return JSONResponse({"error": "Not found"}, status_code=404)
-
-
-# Try to mount static files as well (for auto directory listings / efficient serving)
-if _STATIC_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 # ---------------------------------------------------------------------------
