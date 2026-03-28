@@ -7,7 +7,13 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from nuwa.core.exceptions import GuardrailTriggered, TrainingAborted
+from nuwa.core.exceptions import (
+    ConfigError,
+    ConnectorError,
+    GuardrailTriggered,
+    LLMError,
+    TrainingAborted,
+)
 from nuwa.core.protocols import Guardrail, ModelBackend, Stage, TargetAgent
 from nuwa.core.types import (
     LoopContext,
@@ -130,169 +136,247 @@ class TrainingLoop:
 
         stop_reason = "max_rounds reached"
 
-        for round_num in range(1, self._config.max_rounds + 1):
-            context.round_num = round_num
-            logger.info("===== Round %d / %d =====", round_num, self._config.max_rounds)
-
-            # Optionally adjust budget for this round.
-            budget = self._scheduler.get_round_budget(round_num)
-            context.config = self._config.model_copy(
-                update={"samples_per_round": budget["samples_per_round"]}
-            )
-
-            # Run pre-validation stages (dataset_gen, execution, evaluation, reflection, mutation).
-            try:
-                for stage in self._pre_validation_stages:
-                    logger.debug("Running stage: %s", stage.name)
-                    context = await stage.execute(context)
-            except (TrainingAborted, GuardrailTriggered) as exc:
-                stop_reason = f"aborted during stage: {exc}"
-                logger.warning("Training aborted in round %d: %s", round_num, exc)
-                break
-            except Exception:
-                logger.exception("Unhandled error in round %d", round_num)
-                raise
-
-            # If a mutation was proposed, apply it, run validation, then decide.
-            if context.proposed_mutation is not None:
-                saved_config = dict(context.current_config)
-                proposed_config = dict(context.proposed_mutation.proposed_config)
-
-                # Apply the proposed config to the active target for validation.
-                # In sandbox mode this mutates only the sandbox copy.
-                active_target.apply_config(proposed_config)
-                context.current_config = proposed_config
-
+        try:
+            for round_num in range(1, self._config.max_rounds + 1):
+                context.round_num = round_num
                 logger.info(
-                    "Round %d: applying proposed mutation for validation",
-                    round_num,
+                    "===== Round %d / %d =====", round_num, self._config.max_rounds
                 )
 
+                # Optionally adjust budget for this round.
+                budget = self._scheduler.get_round_budget(round_num)
+                context.config = self._config.model_copy(
+                    update={"samples_per_round": budget["samples_per_round"]}
+                )
+
+                # Run pre-validation stages.
                 try:
-                    context = await self._validation_stage.execute(context)
+                    for stage in self._pre_validation_stages:
+                        logger.debug("Running stage: %s", stage.name)
+                        context = await stage.execute(context)
                 except (TrainingAborted, GuardrailTriggered) as exc:
-                    stop_reason = f"aborted during validation: {exc}"
+                    stop_reason = f"aborted during stage: {exc}"
                     logger.warning("Training aborted in round %d: %s", round_num, exc)
-                    # Rollback before breaking.
-                    active_target.apply_config(saved_config)
-                    context.current_config = saved_config
                     break
+                except (LLMError, ConnectorError, ConfigError) as exc:
+                    # Recoverable: skip this round, keep best config, continue.
+                    logger.error(
+                        "Round %d: recoverable error in pipeline: [%s] %s. "
+                        "Skipping round, retaining best config.",
+                        round_num,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    from nuwa.core.types import Reflection as _Reflection
+                    from nuwa.core.types import ScoreCard as _ScoreCard
+
+                    fallback_scores = context.train_scores or _ScoreCard(
+                        results=[],
+                        failure_analysis=f"Round skipped: {type(exc).__name__}: {exc}",
+                    )
+                    fallback_reflection = context.reflection or _Reflection(
+                        round_num=round_num,
+                        diagnosis=f"Round skipped: {exc}",
+                        failure_patterns=[],
+                        proposed_changes=[],
+                        priority="high",
+                    )
+                    round_result = RoundResult(
+                        round_num=round_num,
+                        train_scores=fallback_scores,
+                        val_scores=context.val_scores,
+                        reflection=fallback_reflection,
+                        mutation=None,
+                        applied=False,
+                        error=str(exc),
+                    )
+                    context.history.append(round_result)
+                    continue
                 except Exception:
-                    logger.exception("Unhandled error in validation round %d", round_num)
+                    logger.exception("Fatal unhandled error in round %d", round_num)
                     raise
 
-                # If validation failed (score regressed), rollback.
+                # If a mutation was proposed, apply it, run validation, then decide.
+                if context.proposed_mutation is not None:
+                    saved_config = dict(context.current_config)
+                    proposed_config = dict(context.proposed_mutation.proposed_config)
+
+                    active_target.apply_config(proposed_config)
+                    context.current_config = proposed_config
+
+                    logger.info(
+                        "Round %d: applying proposed mutation for validation",
+                        round_num,
+                    )
+
+                    try:
+                        context = await self._validation_stage.execute(context)
+                    except (TrainingAborted, GuardrailTriggered) as exc:
+                        stop_reason = f"aborted during validation: {exc}"
+                        logger.warning(
+                            "Training aborted in round %d: %s", round_num, exc
+                        )
+                        active_target.apply_config(saved_config)
+                        context.current_config = saved_config
+                        break
+                    except (LLMError, ConnectorError) as exc:
+                        logger.error(
+                            "Round %d: validation failed with recoverable error: "
+                            "[%s] %s. Rolling back mutation.",
+                            round_num,
+                            type(exc).__name__,
+                            exc,
+                        )
+                        active_target.apply_config(saved_config)
+                        context.current_config = saved_config
+                    except Exception:
+                        logger.exception(
+                            "Fatal unhandled error in validation round %d", round_num
+                        )
+                        active_target.apply_config(saved_config)
+                        context.current_config = saved_config
+                        raise
+
+                    # If validation failed (score regressed), rollback.
+                    val_mean = (
+                        context.val_scores.mean_score if context.val_scores else 0.0
+                    )
+                    regression = context.best_val_score - val_mean
+                    if (
+                        regression > self._config.regression_tolerance
+                        and context.best_val_score > 0.0
+                    ):
+                        logger.warning(
+                            "Round %d: validation score %.3f regressed from best %.3f "
+                            "(tolerance=%.3f). Rolling back mutation.",
+                            round_num,
+                            val_mean,
+                            context.best_val_score,
+                            self._config.regression_tolerance,
+                        )
+                        active_target.apply_config(saved_config)
+                        context.current_config = saved_config
+                    else:
+                        logger.info(
+                            "Round %d: validation passed (score=%.3f), keeping mutation.",
+                            round_num,
+                            val_mean,
+                        )
+                else:
+                    # No mutation proposed; still run validation with current config.
+                    try:
+                        context = await self._validation_stage.execute(context)
+                    except (TrainingAborted, GuardrailTriggered) as exc:
+                        stop_reason = f"aborted during validation: {exc}"
+                        logger.warning(
+                            "Training aborted in round %d: %s", round_num, exc
+                        )
+                        break
+                    except (LLMError, ConnectorError) as exc:
+                        logger.error(
+                            "Round %d: validation failed with recoverable error: "
+                            "[%s] %s. Skipping round.",
+                            round_num,
+                            type(exc).__name__,
+                            exc,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Fatal unhandled error in validation round %d", round_num
+                        )
+                        raise
+
+                # Build RoundResult for this round.
+                if context.train_scores is None:
+                    raise TrainingAborted(
+                        f"round {round_num} missing train_scores after evaluation stage"
+                    )
+                if context.reflection is None:
+                    raise TrainingAborted(
+                        f"round {round_num} missing reflection after reflection stage"
+                    )
+                round_result = RoundResult(
+                    round_num=round_num,
+                    train_scores=context.train_scores,
+                    val_scores=context.val_scores,
+                    reflection=context.reflection,
+                    mutation=context.proposed_mutation,
+                    applied=context.proposed_mutation is not None,
+                )
+                if self._pareto_tracker is not None and self._objective_set is not None:
+                    objective_scores = self._build_objective_scores(context)
+                    on_frontier = self._pareto_tracker.add(
+                        round_num=round_num,
+                        config=context.current_config,
+                        scores=objective_scores,
+                    )
+                    round_result.pareto_frontier_size = len(
+                        self._pareto_tracker.frontier
+                    )
+                    logger.info(
+                        "Round %d: multi-objective tracked (frontier=%d, "
+                        "on_frontier=%s, scores=%s)",
+                        round_num,
+                        round_result.pareto_frontier_size,
+                        on_frontier,
+                        {k: round(v, 4) for k, v in objective_scores.items()},
+                    )
+                # Trim history to prevent unbounded memory growth.
+                context.history.append(round_result)
+                if len(context.history) > context.max_history_size:
+                    context.history = context.history[-context.max_history_size :]
+
+                # Track best config / score.
                 val_mean = (
                     context.val_scores.mean_score if context.val_scores else 0.0
                 )
-                regression = context.best_val_score - val_mean
-                if regression > self._config.regression_tolerance and context.best_val_score > 0.0:
-                    logger.warning(
-                        "Round %d: validation score %.3f regressed from best %.3f "
-                        "(tolerance=%.3f). Rolling back mutation.",
+                if val_mean > context.best_val_score:
+                    context.best_val_score = val_mean
+                    context.best_config = dict(context.current_config)
+                    logger.info(
+                        "Round %d: new best val score %.3f", round_num, val_mean
+                    )
+                else:
+                    logger.info(
+                        "Round %d: val score %.3f did not beat best %.3f",
                         round_num,
                         val_mean,
                         context.best_val_score,
-                        self._config.regression_tolerance,
                     )
-                    active_target.apply_config(saved_config)
-                    context.current_config = saved_config
-                else:
-                    logger.info(
-                        "Round %d: validation passed (score=%.3f), keeping mutation.",
-                        round_num,
-                        val_mean,
-                    )
-            else:
-                # No mutation proposed; still run validation with current config.
-                try:
-                    context = await self._validation_stage.execute(context)
-                except (TrainingAborted, GuardrailTriggered) as exc:
-                    stop_reason = f"aborted during validation: {exc}"
-                    logger.warning("Training aborted in round %d: %s", round_num, exc)
+
+                # Check guardrails.
+                should_halt, halt_reason = self._check_guardrails(context)
+                if should_halt:
+                    stop_reason = halt_reason
+                    logger.info("Guardrail triggered stop: %s", halt_reason)
                     break
-                except Exception:
-                    logger.exception("Unhandled error in validation round %d", round_num)
-                    raise
 
-            # Build RoundResult for this round.
-            if context.train_scores is None:
-                raise TrainingAborted(
-                    f"round {round_num} missing train_scores after evaluation stage"
-                )
-            if context.reflection is None:
-                raise TrainingAborted(
-                    f"round {round_num} missing reflection after reflection stage"
-                )
-            round_result = RoundResult(
-                round_num=round_num,
-                train_scores=context.train_scores,
-                val_scores=context.val_scores,
-                reflection=context.reflection,
-                mutation=context.proposed_mutation,
-                applied=context.proposed_mutation is not None,
-            )
-            if self._pareto_tracker is not None and self._objective_set is not None:
-                objective_scores = self._build_objective_scores(context)
-                on_frontier = self._pareto_tracker.add(
-                    round_num=round_num,
-                    config=context.current_config,
-                    scores=objective_scores,
-                )
-                round_result.pareto_frontier_size = len(self._pareto_tracker.frontier)
+                # Check scheduler convergence.
+                if self._pareto_tracker is not None:
+                    converged, conv_reason = (
+                        self._scheduler.should_stop_multi_objective(
+                            context,
+                            self._pareto_tracker,
+                        )
+                    )
+                else:
+                    converged, conv_reason = self._scheduler.should_stop(context)
+                if converged:
+                    stop_reason = conv_reason
+                    logger.info("Scheduler stop: %s", conv_reason)
+                    break
+
+                # Fire callbacks for UI / monitoring.
+                self._fire_callbacks(round_result, context)
+
+        finally:
+            # Log sandbox session state on any exit path.
+            if self._sandbox is not None and sandbox_session_id is not None:
                 logger.info(
-                    "Round %d: multi-objective tracked (frontier=%d, on_frontier=%s, scores=%s)",
-                    round_num,
-                    round_result.pareto_frontier_size,
-                    on_frontier,
-                    {k: round(v, 4) for k, v in objective_scores.items()},
+                    "Training loop finished (session %s). Sandbox state preserved "
+                    "for promote/discard.",
+                    sandbox_session_id,
                 )
-            # Trim history to prevent unbounded memory growth in long training runs.
-            context.history.append(round_result)
-            if len(context.history) > context.max_history_size:
-                context.history = context.history[-context.max_history_size:]
-
-            # Track best config / score.
-            val_mean = (
-                context.val_scores.mean_score if context.val_scores else 0.0
-            )
-            if val_mean > context.best_val_score:
-                context.best_val_score = val_mean
-                context.best_config = dict(context.current_config)
-                logger.info(
-                    "Round %d: new best val score %.3f", round_num, val_mean
-                )
-            else:
-                # Check for regression and rollback if needed.
-                logger.info(
-                    "Round %d: val score %.3f did not beat best %.3f",
-                    round_num,
-                    val_mean,
-                    context.best_val_score,
-                )
-
-            # Check guardrails.
-            should_halt, halt_reason = self._check_guardrails(context)
-            if should_halt:
-                stop_reason = halt_reason
-                logger.info("Guardrail triggered stop: %s", halt_reason)
-                break
-
-            # Check scheduler convergence.
-            if self._pareto_tracker is not None:
-                converged, conv_reason = self._scheduler.should_stop_multi_objective(
-                    context,
-                    self._pareto_tracker,
-                )
-            else:
-                converged, conv_reason = self._scheduler.should_stop(context)
-            if converged:
-                stop_reason = conv_reason
-                logger.info("Scheduler stop: %s", conv_reason)
-                break
-
-            # Fire callbacks for UI / monitoring.
-            self._fire_callbacks(round_result, context)
 
         elapsed = time.monotonic() - start_time
         return self._finalize(context, stop_reason, elapsed, sandbox_session_id)

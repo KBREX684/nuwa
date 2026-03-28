@@ -12,6 +12,8 @@ import json
 import logging
 import os
 import re
+import time
+from collections import defaultdict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -47,6 +49,26 @@ logger = logging.getLogger(__name__)
 _API_KEY: str | None = os.environ.get("NUWA_API_KEY")
 _UNAUTH_MSG = {"error": "Unauthorized. Provide X-API-Key header."}
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9._/\-]+$")
+
+# ---------------------------------------------------------------------------
+# Rate limiting (in-memory, per-client)
+# ---------------------------------------------------------------------------
+_RATE_LIMIT_WINDOW_S: float = 60.0
+_RATE_LIMIT_MAX_REQUESTS: int = 120
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(client_id: str) -> bool:
+    """Return True if the client is within rate limits."""
+    now = time.monotonic()
+    window = _rate_limit_store[client_id]
+    # Prune entries older than the window
+    _rate_limit_store[client_id] = [t for t in window if now - t < _RATE_LIMIT_WINDOW_S]
+    window = _rate_limit_store[client_id]
+    if len(window) >= _RATE_LIMIT_MAX_REQUESTS:
+        return False
+    window.append(now)
+    return True
 
 # ---------------------------------------------------------------------------
 # SSE dependency (sse-starlette)
@@ -139,7 +161,7 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     logger.info("Nuwa server shutdown complete.")
 
 
-app = FastAPI(title="Nuwa Training Dashboard", version="0.1.0", lifespan=_lifespan)
+app = FastAPI(title="Nuwa Training Dashboard", version="0.2.0", lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 # CORS — origins read from NUWA_CORS_ORIGINS (comma-separated).
@@ -168,23 +190,31 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 @app.middleware("http")
 async def _auth_middleware(request: Request, call_next: Any) -> Any:
-    """If NUWA_API_KEY is set, enforce API key on all /api/* routes."""
-    if _API_KEY is None:
-        return await call_next(request)
+    """Enforce API key auth and rate limiting on /api/* routes."""
+    if request.url.path.startswith("/api/"):
+        # Rate limiting
+        client_id = request.client.host if request.client else "unknown"
+        if not _check_rate_limit(client_id):
+            return JSONResponse(
+                {"error": "Rate limit exceeded. Try again later."},
+                status_code=429,
+            )
 
-    if not request.url.path.startswith("/api/"):
-        return await call_next(request)
+        # API key auth
+        if _API_KEY is not None:
+            provided = request.headers.get("x-api-key") or ""
+            if not provided:
+                auth_header = request.headers.get("authorization", "")
+                if auth_header.lower().startswith("bearer "):
+                    provided = auth_header[7:].strip()
 
-    # Check X-API-Key header first, then Authorization: Bearer ...
-    provided = request.headers.get("x-api-key") or ""
-    if not provided:
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer "):
-            provided = auth_header[7:].strip()
-
-    if provided != _API_KEY:
-        logger.warning("Unauthorized request to %s from %s", request.url.path, request.client)
-        return JSONResponse(_UNAUTH_MSG, status_code=401)
+            if provided != _API_KEY:
+                logger.warning(
+                    "Unauthorized request to %s from %s",
+                    request.url.path,
+                    request.client,
+                )
+                return JSONResponse(_UNAUTH_MSG, status_code=401)
 
     return await call_next(request)
 
@@ -258,6 +288,12 @@ def _resolve_run_log() -> RunLog:
 # ---------------------------------------------------------------------------
 # Endpoint: GET /api/status
 # ---------------------------------------------------------------------------
+
+
+@app.get("/api/health")
+async def health_check() -> JSONResponse:
+    """Health check endpoint for load balancers and monitoring."""
+    return JSONResponse({"status": "ok", "version": "0.2.0"})
 
 
 @app.get("/api/status")
@@ -857,7 +893,12 @@ async def _spa_fallback(full_path: str) -> Any:
     """Serve static files with SPA index.html fallback."""
     from starlette.responses import FileResponse
 
-    file_path = _STATIC_DIR / full_path
+    file_path = (_STATIC_DIR / full_path).resolve()
+
+    # Path traversal protection: ensure resolved path is under static dir
+    if not str(file_path).startswith(str(_STATIC_DIR.resolve())):
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
     if file_path.is_file():
         return FileResponse(file_path)
     index = _STATIC_DIR / "index.html"

@@ -2,13 +2,16 @@
 
 Provides a unified async interface for LLM completions (plain text and
 structured / JSON-validated) with automatic retries, exponential back-off
-for rate-limit errors, and token-usage logging.
+with jitter for rate-limit errors, circuit breaker pattern, and
+token-usage logging.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import random
+import time
 from typing import Any, TypeVar
 
 import litellm
@@ -32,6 +35,10 @@ T = TypeVar("T", bound=BaseModel)
 _MAX_RETRIES: int = LLM_MAX_RETRIES
 _INITIAL_BACKOFF_S: float = LLM_INITIAL_BACKOFF_S
 _BACKOFF_MULTIPLIER: float = LLM_BACKOFF_MULTIPLIER
+
+# Circuit breaker thresholds
+_CB_FAILURE_THRESHOLD: int = 5
+_CB_RECOVERY_TIMEOUT_S: float = 60.0
 
 # LiteLLM exceptions that warrant a retry
 _RETRYABLE_ERROR_NAMES = {
@@ -80,6 +87,10 @@ class LiteLLMBackend:
         # Cumulative token counters for the lifetime of this backend instance
         self._total_prompt_tokens: int = 0
         self._total_completion_tokens: int = 0
+
+        # Circuit breaker state
+        self._cb_failures: int = 0
+        self._cb_open_until: float = 0.0  # monotonic timestamp
 
     # --------------------------------------------------------------------- #
     #  Public API                                                            #
@@ -190,11 +201,22 @@ class LiteLLMBackend:
         messages: list[dict[str, str]],
         **kwargs: Any,
     ) -> Any:
-        """Call ``litellm.acompletion`` with exponential-backoff retries.
+        """Call ``litellm.acompletion`` with exponential-backoff retries and circuit breaker.
 
         Only rate-limit and transient service errors are retried.  Other
-        exceptions propagate immediately.
+        exceptions propagate immediately.  A circuit breaker prevents
+        hammering a failing API.
         """
+        # Circuit breaker: check if open
+        if self._cb_failures >= _CB_FAILURE_THRESHOLD:
+            if time.monotonic() < self._cb_open_until:
+                raise LLMError(
+                    f"Circuit breaker open: {_CB_FAILURE_THRESHOLD} consecutive "
+                    f"failures. Retrying after {_CB_RECOVERY_TIMEOUT_S:.0f}s."
+                )
+            # Half-open: allow one attempt
+            logger.info("Circuit breaker half-open: attempting recovery call.")
+
         backoff = _INITIAL_BACKOFF_S
         last_exc: Exception | None = None
 
@@ -210,21 +232,35 @@ class LiteLLMBackend:
                     max_tokens=call_kwargs.pop("max_tokens", self.max_tokens),
                     **call_kwargs,
                 )
+                # Success: reset circuit breaker
+                self._cb_failures = 0
                 return response
             except Exception as exc:
                 if type(exc).__name__ in _RETRYABLE_ERROR_NAMES:
                     last_exc = exc
+                    self._cb_failures += 1
+                    if self._cb_failures >= _CB_FAILURE_THRESHOLD:
+                        self._cb_open_until = time.monotonic() + _CB_RECOVERY_TIMEOUT_S
+                        logger.error(
+                            "Circuit breaker tripped after %d failures. "
+                            "Blocking calls for %.0fs.",
+                            self._cb_failures,
+                            _CB_RECOVERY_TIMEOUT_S,
+                        )
                     if attempt < _MAX_RETRIES:
+                        jitter = random.uniform(0, backoff * 0.5)
+                        delay = backoff + jitter
                         logger.warning(
                             "LLM call attempt %d/%d failed with %s: %s - "
-                            "retrying in %.1fs",
+                            "retrying in %.1fs (jitter +%.1fs)",
                             attempt,
                             _MAX_RETRIES,
                             type(exc).__name__,
                             exc,
                             backoff,
+                            jitter,
                         )
-                        await asyncio.sleep(backoff)
+                        await asyncio.sleep(delay)
                         backoff *= _BACKOFF_MULTIPLIER
                     continue
                 raise LLMError(

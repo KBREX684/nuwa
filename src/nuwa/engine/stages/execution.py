@@ -7,6 +7,7 @@ import logging
 import time
 
 from nuwa.core.defaults import DEFAULT_MAX_CONCURRENCY, INVOKE_TIMEOUT_S
+from nuwa.core.exceptions import ConfigError, ConnectorError, LLMError
 from nuwa.core.types import AgentResponse, EvalSample, LoopContext, ScoredResult
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ class ExecutionStage:
                     )
                 except Exception as exc:  # noqa: BLE001
                     elapsed_ms = (time.perf_counter() - start) * 1000.0
+                    # System-level errors should propagate, not be masked as agent failures.
+                    if isinstance(exc, (ConfigError, LLMError)):
+                        raise
                     logger.warning(
                         "Sample %s failed with %s: %s",
                         sample.id,

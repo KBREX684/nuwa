@@ -139,11 +139,23 @@ class MutationStage:
 
     @staticmethod
     def _apply_config_path(config: dict[str, Any], path: str, value: Any) -> None:
-        """Set a value in a nested dict using a dot-separated path."""
+        """Set a value in a nested dict using a dot-separated path.
+
+        Raises ``ValueError`` if the path would overwrite a non-dict value
+        at an intermediate key (which would destroy existing config data).
+        """
         keys = path.split(".")
         obj = config
         for key in keys[:-1]:
-            if key not in obj or not isinstance(obj[key], dict):
+            if key not in obj:
                 obj[key] = {}
-            obj = obj[key]
+                obj = obj[key]
+            elif isinstance(obj[key], dict):
+                obj = obj[key]
+            else:
+                raise ValueError(
+                    f"Cannot set '{path}': intermediate key '{key}' holds a "
+                    f"{type(obj[key]).__name__}, not a dict. "
+                    f"Refusing to overwrite."
+                )
         obj[keys[-1]] = value

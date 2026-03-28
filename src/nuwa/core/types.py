@@ -265,6 +265,10 @@ class RoundResult(BaseModel):
         default_factory=lambda: datetime.now(UTC),
         description="UTC timestamp when the round completed.",
     )
+    error: str | None = Field(
+        default=None,
+        description="Error message if the round was skipped due to a recoverable error.",
+    )
 
 
 class TrainingResult(BaseModel):

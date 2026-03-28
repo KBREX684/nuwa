@@ -109,8 +109,12 @@ class ParallelExecutor:
                     if on_progress is not None:
                         try:
                             on_progress(completed, total)
-                        except Exception:  # noqa: BLE001
-                            logger.debug("Progress callback raised; ignoring.")
+                        except Exception as cb_exc:  # noqa: BLE001
+                            logger.warning(
+                                "Progress callback raised %s: %s; ignoring.",
+                                type(cb_exc).__name__,
+                                cb_exc,
+                            )
                 return sample, response
 
         logger.info(
