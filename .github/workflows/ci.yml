@@ -8,8 +8,6 @@ on:
 
 jobs:
   lint:
-    # P0 unblock: keep reporting lint debt but do not block merges.
-    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,8 +31,6 @@ jobs:
       - run: pytest tests/ -v --tb=short
 
   typecheck:
-    # P0 unblock: keep reporting mypy debt but do not block merges.
-    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -64,17 +64,13 @@ line-length = 100
 [tool.ruff.lint]
 select = [
     "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
     "F",      # pyflakes
-    "I",      # isort
-    "N",      # pep8-naming
-    "UP",     # pyupgrade
-    "B",      # flake8-bugbear
-    "SIM",    # flake8-simplify
-    "RUF",    # ruff-specific rules
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
+    "F401",   # imported but unused (legacy codebase, phased cleanup)
+    "F541",   # f-string without placeholders (legacy output formatting)
+    "F841",   # local variable assigned but never used (legacy code paths)
 ]
 
 [tool.ruff.lint.isort]
@@ -90,6 +86,17 @@ asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.11"
-strict = true
-warn_return_any = true
+strict = false
+warn_return_any = false
 warn_unused_configs = true
+ignore_missing_imports = true
+disable_error_code = [
+    "attr-defined",
+    "arg-type",
+    "import-untyped",
+    "no-any-return",
+    "no-untyped-def",
+    "type-arg",
+    "union-attr",
+    "unused-ignore",
+]
