@@ -102,12 +102,16 @@ class ReflectionStage:
             else:
                 buckets["0.75-1.0"] += 1
 
-        std_dev = math.sqrt(sum((s - mean_score) ** 2 for s in all_scores) / len(all_scores)) if len(all_scores) > 1 else 0.0
+        std_dev = (
+            math.sqrt(sum((s - mean_score) ** 2 for s in all_scores) / len(all_scores))
+            if len(all_scores) > 1
+            else 0.0
+        )
 
         summary_stats = (
             f"=== Summary Statistics ===\n"
             f"Total samples: {len(score_card.results)}\n"
-            f"Failures: {len(failures)} ({len(failures)/len(score_card.results)*100:.1f}%)\n"
+            f"Failures: {len(failures)} ({len(failures) / len(score_card.results) * 100:.1f}%)\n"
             f"Pass rate: {pass_rate:.2%}\n"
             f"Mean score: {mean_score:.3f} (std: {std_dev:.3f})\n"
             f"Score distribution: {buckets}\n"
@@ -182,7 +186,9 @@ class ReflectionStage:
                 label = fp.get("label_en", "") or fp.get("label_zh", "")
                 root_cause = fp.get("root_cause", "")
                 if label or root_cause:
-                    failure_patterns.append(f"{label}: {root_cause}" if label and root_cause else label or root_cause)
+                    failure_patterns.append(
+                        f"{label}: {root_cause}" if label and root_cause else label or root_cause
+                    )
 
             proposed_changes: list[str] = []
             for pc in data.get("proposed_changes", []):

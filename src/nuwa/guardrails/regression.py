@@ -83,8 +83,7 @@ class RegressionGuardrail(BaseGuardrail):
                 passed=True,
                 guardrail_name=self.name,
                 reason=(
-                    f"Round {latest.round_num} has no validation scores; "
-                    "regression check skipped."
+                    f"Round {latest.round_num} has no validation scores; regression check skipped."
                 ),
             )
 

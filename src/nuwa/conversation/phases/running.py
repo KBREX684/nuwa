@@ -47,18 +47,13 @@ class RunningPhase:
             if event == "loop_start":
                 self._max_rounds = kwargs.get("max_rounds", 0)
                 self._scores.clear()
-                self._renderer.status(
-                    f"训练开始，最多 {self._max_rounds} 轮。"
-                )
+                self._renderer.status(f"训练开始，最多 {self._max_rounds} 轮。")
 
             elif event == "round_start":
                 self._current_round = kwargs.get("round_num", 0)
+                self._console.print(f"\n[bold cyan]{'─' * 50}[/bold cyan]")
                 self._console.print(
-                    f"\n[bold cyan]{'─' * 50}[/bold cyan]"
-                )
-                self._console.print(
-                    f"[bold cyan]轮次 {self._current_round} / "
-                    f"{self._max_rounds}[/bold cyan]"
+                    f"[bold cyan]轮次 {self._current_round} / {self._max_rounds}[/bold cyan]"
                 )
 
             elif event == "stage":
@@ -73,9 +68,7 @@ class RunningPhase:
                     "guardrail": "护栏检查",
                 }
                 label = stage_labels.get(stage_name, stage_name)
-                self._console.print(
-                    f"  [dim]▸ {label}...[/dim]"
-                )
+                self._console.print(f"  [dim]▸ {label}...[/dim]")
 
             elif event == "round_end":
                 rr: RoundResult | None = kwargs.get("round_result")

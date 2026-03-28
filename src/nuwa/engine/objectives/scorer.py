@@ -77,9 +77,7 @@ class MultiObjectiveScorer:
             async with sem:
                 return await self.score_one(sample, resp)
 
-        scores = list(
-            await asyncio.gather(*(_bounded(s, r) for s, r in results))
-        )
+        scores = list(await asyncio.gather(*(_bounded(s, r) for s, r in results)))
         return MultiObjectiveScoreCard.from_scored_results(scores, self._objectives)
 
     # ------------------------------------------------------------------
@@ -102,9 +100,7 @@ class MultiObjectiveScorer:
             for obj in self._objectives.objectives
         )
 
-        obj_keys_example = ", ".join(
-            f'"{obj.name}": 0.85' for obj in self._objectives.objectives
-        )
+        obj_keys_example = ", ".join(f'"{obj.name}": 0.85' for obj in self._objectives.objectives)
         reasoning_keys_example = ", ".join(
             f'"{obj.name}": "..."' for obj in self._objectives.objectives
         )
@@ -145,7 +141,8 @@ class MultiObjectiveScorer:
         """Compute a weighted aggregate from per-objective scores."""
         weights = self._objectives.weights_dict()
         total_weight = sum(weights.get(n, 1.0) for n in self._objectives.names()) or 1.0
-        weighted = sum(
-            scores.get(n, 0.0) * weights.get(n, 1.0) for n in self._objectives.names()
-        ) / total_weight
+        weighted = (
+            sum(scores.get(n, 0.0) * weights.get(n, 1.0) for n in self._objectives.names())
+            / total_weight
+        )
         return max(0.0, min(1.0, weighted))

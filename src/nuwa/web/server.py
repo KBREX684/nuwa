@@ -70,6 +70,7 @@ def _check_rate_limit(client_id: str) -> bool:
     window.append(now)
     return True
 
+
 # ---------------------------------------------------------------------------
 # SSE dependency (sse-starlette)
 # ---------------------------------------------------------------------------
@@ -87,16 +88,16 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 _state: dict[str, Any] = {
-    "current_config": None,          # NuwaConfig | None
-    "training_status": "idle",        # idle | running | completed | error
-    "training_result": None,          # TrainingResult | None
-    "round_history": [],              # list[dict]  (round event dicts for SSE)
+    "current_config": None,  # NuwaConfig | None
+    "training_status": "idle",  # idle | running | completed | error
+    "training_result": None,  # TrainingResult | None
+    "round_history": [],  # list[dict]  (round event dicts for SSE)
     "current_round": 0,
     "current_stage": "",
-    "error_message": None,            # str | None
+    "error_message": None,  # str | None
     "stop_requested": False,
-    "event_queue": None,              # asyncio.Queue | None
-    "training_task": None,            # asyncio.Task | None
+    "event_queue": None,  # asyncio.Queue | None
+    "training_task": None,  # asyncio.Task | None
 }
 
 # ---------------------------------------------------------------------------
@@ -106,6 +107,7 @@ _state: dict[str, Any] = {
 
 class ConfigRequest(BaseModel):
     """POST /api/config request body."""
+
     llm_model: str = "openai/gpt-4o"
     llm_api_key: str | None = None
     llm_base_url: str | None = None
@@ -122,6 +124,7 @@ class ConfigRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     """POST /api/approve request body."""
+
     decision: Literal["accept", "reject", "extend"]
     extra_rounds: int = Field(default=5, ge=1)
 
@@ -223,10 +226,14 @@ async def _auth_middleware(request: Request, call_next: Any) -> Any:
 # Safe error helper — never expose internal exception text to clients
 # ---------------------------------------------------------------------------
 
+
 def _safe_error(exc: Exception, status_code: int = 400) -> JSONResponse:
     """Return a generic error to the client; log the real exception."""
     logger.exception("Request failed: %s", exc)
-    return JSONResponse({"error": "Request failed. Check server logs for details."}, status_code=status_code)
+    return JSONResponse(
+        {"error": "Request failed. Check server logs for details."}, status_code=status_code
+    )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -299,12 +306,14 @@ async def health_check() -> JSONResponse:
 @app.get("/api/status")
 async def get_status() -> JSONResponse:
     """Return the current dashboard state."""
-    return JSONResponse({
-        "training_status": _state["training_status"],
-        "current_round": _state["current_round"],
-        "current_stage": _state["current_stage"],
-        "error": _state["error_message"],
-    })
+    return JSONResponse(
+        {
+            "training_status": _state["training_status"],
+            "current_round": _state["current_round"],
+            "current_stage": _state["current_stage"],
+            "error": _state["error_message"],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -346,15 +355,9 @@ def _make_round_callback(backend: Any) -> Any:
 
     def _callback(round_result: RoundResult, context: Any) -> None:
         train_mean = round_result.train_scores.mean_score
-        val_mean = (
-            round_result.val_scores.mean_score if round_result.val_scores else 0.0
-        )
-        reflection_text = (
-            round_result.reflection.diagnosis if round_result.reflection else ""
-        )
-        mutation_text = (
-            round_result.mutation.description if round_result.mutation else ""
-        )
+        val_mean = round_result.val_scores.mean_score if round_result.val_scores else 0.0
+        reflection_text = round_result.reflection.diagnosis if round_result.reflection else ""
+        mutation_text = round_result.mutation.description if round_result.mutation else ""
         event: dict[str, Any] = {
             "type": "round_end",
             "round": round_result.round_num,
@@ -402,11 +405,13 @@ async def _run_training(
     _state["training_status"] = "running"
 
     # Emit initial event
-    _push_event({
-        "type": "round_start",
-        "round": 1,
-        "max_rounds": training_config.max_rounds,
-    })
+    _push_event(
+        {
+            "type": "round_start",
+            "round": 1,
+            "max_rounds": training_config.max_rounds,
+        }
+    )
 
     try:
         # Wrap the loop to inject per-round stage events and stop check.
@@ -417,23 +422,27 @@ async def _run_training(
         _state["training_result"] = result
         _state["training_status"] = "completed"
 
-        _push_event({
-            "type": "training_complete",
-            "best_round": result.best_round,
-            "best_score": round(result.best_val_score, 4),
-            "stop_reason": result.stop_reason,
-        })
+        _push_event(
+            {
+                "type": "training_complete",
+                "best_round": result.best_round,
+                "best_score": round(result.best_val_score, 4),
+                "stop_reason": result.stop_reason,
+            }
+        )
 
     except asyncio.CancelledError:
         logger.info("Training cancelled by user request")
         _state["training_status"] = "completed"
         _state["current_stage"] = "stopped"
-        _push_event({
-            "type": "training_complete",
-            "best_round": 0,
-            "best_score": 0.0,
-            "stop_reason": "stopped by user",
-        })
+        _push_event(
+            {
+                "type": "training_complete",
+                "best_round": 0,
+                "best_score": 0.0,
+                "stop_reason": "stopped by user",
+            }
+        )
 
     except Exception as exc:
         logger.exception("Training failed")
@@ -447,7 +456,8 @@ async def train_start() -> JSONResponse:
     """Start a training run in a background asyncio task."""
     if _state["training_status"] == "running":
         return JSONResponse(
-            {"error": "Training is already running."}, status_code=409,
+            {"error": "Training is already running."},
+            status_code=409,
         )
 
     cfg = cast(NuwaConfig | None, _state.get("current_config"))
@@ -556,23 +566,19 @@ async def get_results_rounds() -> JSONResponse:
     for rr in result.rounds:
         train_mean = rr.train_scores.mean_score
         val_mean = rr.val_scores.mean_score if rr.val_scores else None
-        rounds_data.append({
-            "round": rr.round_num,
-            "train_score": round(train_mean, 4),
-            "val_score": round(val_mean, 4) if val_mean is not None else None,
-            "train_pass_rate": round(rr.train_scores.pass_rate, 4),
-            "val_pass_rate": (
-                round(rr.val_scores.pass_rate, 4) if rr.val_scores else None
-            ),
-            "reflection": (
-                rr.reflection.diagnosis if rr.reflection else ""
-            ),
-            "mutation": (
-                rr.mutation.description if rr.mutation else ""
-            ),
-            "applied": rr.applied,
-            "timestamp": rr.timestamp.isoformat(),
-        })
+        rounds_data.append(
+            {
+                "round": rr.round_num,
+                "train_score": round(train_mean, 4),
+                "val_score": round(val_mean, 4) if val_mean is not None else None,
+                "train_pass_rate": round(rr.train_scores.pass_rate, 4),
+                "val_pass_rate": (round(rr.val_scores.pass_rate, 4) if rr.val_scores else None),
+                "reflection": (rr.reflection.diagnosis if rr.reflection else ""),
+                "mutation": (rr.mutation.description if rr.mutation else ""),
+                "applied": rr.applied,
+                "timestamp": rr.timestamp.isoformat(),
+            }
+        )
     return JSONResponse(rounds_data)
 
 
@@ -589,7 +595,8 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
     if body.decision == "accept":
         if result is None:
             return JSONResponse(
-                {"error": "No training result to accept."}, status_code=400,
+                {"error": "No training result to accept."},
+                status_code=400,
             )
         # Save the final config to disk
         cfg = cast(NuwaConfig | None, _state.get("current_config"))
@@ -612,11 +619,13 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
         cfg = cast(NuwaConfig | None, _state.get("current_config"))
         if cfg is None:
             return JSONResponse(
-                {"error": "No configuration available."}, status_code=400,
+                {"error": "No configuration available."},
+                status_code=400,
             )
         if _state["training_status"] == "running":
             return JSONResponse(
-                {"error": "Training is already running."}, status_code=409,
+                {"error": "Training is already running."},
+                status_code=409,
             )
         # Update max_rounds and restart
         extended_cfg = cfg.model_copy(
@@ -637,6 +646,7 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
         _state["training_task"] = task
         return JSONResponse({"ok": True})
 
+
 # ---------------------------------------------------------------------------
 # Endpoint: GET /api/history
 # ---------------------------------------------------------------------------
@@ -648,9 +658,7 @@ async def get_history() -> JSONResponse:
     try:
         run_log = _resolve_run_log()
         history = run_log.load_history()
-        return JSONResponse([
-            json.loads(rr.model_dump_json()) for rr in history
-        ])
+        return JSONResponse([json.loads(rr.model_dump_json()) for rr in history])
     except Exception as exc:
         return _safe_error(exc, 500)
 
@@ -677,11 +685,13 @@ async def _run_demo_training() -> None:
     max_rounds = 5
     rounds_results: list[RoundResult] = []
 
-    _push_event({
-        "type": "round_start",
-        "round": 1,
-        "max_rounds": max_rounds,
-    })
+    _push_event(
+        {
+            "type": "round_start",
+            "round": 1,
+            "max_rounds": max_rounds,
+        }
+    )
 
     try:
         for round_num in range(1, max_rounds + 1):
@@ -692,47 +702,57 @@ async def _run_demo_training() -> None:
 
             # -- Stage: dataset_gen --
             _state["current_stage"] = "dataset_gen"
-            _push_event({
-                "type": "stage",
-                "round": round_num,
-                "stage": "dataset_gen",
-            })
+            _push_event(
+                {
+                    "type": "stage",
+                    "round": round_num,
+                    "stage": "dataset_gen",
+                }
+            )
             await asyncio.sleep(0.5)
 
             # -- Stage: execution --
             _state["current_stage"] = "execution"
-            _push_event({
-                "type": "stage",
-                "round": round_num,
-                "stage": "execution",
-            })
+            _push_event(
+                {
+                    "type": "stage",
+                    "round": round_num,
+                    "stage": "execution",
+                }
+            )
             await asyncio.sleep(0.5)
 
             # -- Stage: evaluation --
             _state["current_stage"] = "evaluation"
-            _push_event({
-                "type": "stage",
-                "round": round_num,
-                "stage": "evaluation",
-            })
+            _push_event(
+                {
+                    "type": "stage",
+                    "round": round_num,
+                    "stage": "evaluation",
+                }
+            )
             await asyncio.sleep(0.5)
 
             # -- Stage: reflection --
             _state["current_stage"] = "reflection"
-            _push_event({
-                "type": "stage",
-                "round": round_num,
-                "stage": "reflection",
-            })
+            _push_event(
+                {
+                    "type": "stage",
+                    "round": round_num,
+                    "stage": "reflection",
+                }
+            )
             await asyncio.sleep(0.5)
 
             # -- Stage: mutation --
             _state["current_stage"] = "mutation"
-            _push_event({
-                "type": "stage",
-                "round": round_num,
-                "stage": "mutation",
-            })
+            _push_event(
+                {
+                    "type": "stage",
+                    "round": round_num,
+                    "stage": "mutation",
+                }
+            )
             await asyncio.sleep(0.5)
 
             # Build simulated scores (improving over rounds)
@@ -824,9 +844,7 @@ async def _run_demo_training() -> None:
                 best_score = vs
                 best_round = rr.round_num
 
-        stop_reason = (
-            "stopped by user" if _state.get("stop_requested") else "max_rounds reached"
-        )
+        stop_reason = "stopped by user" if _state.get("stop_requested") else "max_rounds reached"
 
         result = TrainingResult(
             rounds=rounds_results,
@@ -839,22 +857,26 @@ async def _run_demo_training() -> None:
 
         _state["training_result"] = result
         _state["training_status"] = "completed"
-        _push_event({
-            "type": "training_complete",
-            "best_round": result.best_round,
-            "best_score": round(result.best_val_score, 4),
-            "stop_reason": result.stop_reason,
-        })
+        _push_event(
+            {
+                "type": "training_complete",
+                "best_round": result.best_round,
+                "best_score": round(result.best_val_score, 4),
+                "stop_reason": result.stop_reason,
+            }
+        )
 
     except asyncio.CancelledError:
         _state["training_status"] = "completed"
         _state["error_message"] = None
-        _push_event({
-            "type": "training_complete",
-            "best_round": 0,
-            "best_score": 0.0,
-            "stop_reason": "stopped by user",
-        })
+        _push_event(
+            {
+                "type": "training_complete",
+                "best_round": 0,
+                "best_score": 0.0,
+                "stop_reason": "stopped by user",
+            }
+        )
     except Exception as exc:
         logger.exception("Demo training failed")
         _state["training_status"] = "error"
@@ -867,7 +889,8 @@ async def demo_start() -> JSONResponse:
     """Start a mock training run for UI testing without real API keys."""
     if _state["training_status"] == "running":
         return JSONResponse(
-            {"error": "Training is already running."}, status_code=409,
+            {"error": "Training is already running."},
+            status_code=409,
         )
 
     _reset_state()
@@ -914,4 +937,4 @@ async def _spa_fallback(full_path: str) -> Any:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8080)  # nosec B104

@@ -30,20 +30,18 @@ CONNECTOR_MAP: dict[str, str] = {
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _import_class(dotted: str) -> type[Any]:
     """Import a class given a ``module.path:ClassName`` string."""
     module_path, _, class_name = dotted.rpartition(":")
     if not module_path or not class_name:
         raise ConfigError(
-            f"Invalid connector reference {dotted!r}; "
-            "expected 'module.path:ClassName'."
+            f"Invalid connector reference {dotted!r}; expected 'module.path:ClassName'."
         )
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name, None)
     if cls is None:
-        raise ConfigError(
-            f"Class {class_name!r} not found in module {module_path!r}."
-        )
+        raise ConfigError(f"Class {class_name!r} not found in module {module_path!r}.")
     return cast(type[Any], cls)
 
 
@@ -52,28 +50,23 @@ def _resolve_callable_ref(ref: str | Callable[..., Any]) -> Callable[..., Any]:
     if callable(ref):
         return ref
     if not isinstance(ref, str) or ":" not in ref:
-        raise ConfigError(
-            "Function connector expects a callable or 'module.path:callable' string."
-        )
+        raise ConfigError("Function connector expects a callable or 'module.path:callable' string.")
     module_path, _, attr_name = ref.rpartition(":")
     if not module_path or not attr_name:
         raise ConfigError(f"Invalid callable reference: {ref!r}")
     module = importlib.import_module(module_path)
     obj = getattr(module, attr_name, None)
     if obj is None:
-        raise ConfigError(
-            f"Callable {attr_name!r} not found in module {module_path!r}."
-        )
+        raise ConfigError(f"Callable {attr_name!r} not found in module {module_path!r}.")
     if not callable(obj):
-        raise ConfigError(
-            f"Resolved object {module_path}:{attr_name} is not callable."
-        )
+        raise ConfigError(f"Resolved object {module_path}:{attr_name} is not callable.")
     return cast(Callable[..., Any], obj)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def create_connector(connector_type: str, **params: Any) -> Any:
     """Instantiate a connector by its short type name.
@@ -104,8 +97,7 @@ def create_connector(connector_type: str, **params: Any) -> Any:
     # Allow fully-qualified references to pass through directly
     if ":" not in dotted:
         raise ConfigError(
-            f"Unknown connector type {connector_type!r}. "
-            f"Available types: {list_connectors()}"
+            f"Unknown connector type {connector_type!r}. Available types: {list_connectors()}"
         )
 
     cls = _import_class(dotted)
@@ -124,8 +116,7 @@ def create_connector(connector_type: str, **params: Any) -> Any:
         instance = cls(**params)
     except TypeError as exc:
         raise ConfigError(
-            f"Failed to create connector {connector_type!r} with "
-            f"params {params}: {exc}"
+            f"Failed to create connector {connector_type!r} with params {params}: {exc}"
         ) from exc
 
     logger.info("Created connector %s (%s)", connector_type, cls.__name__)
@@ -148,8 +139,6 @@ def register_connector(name: str, dotted_path: str) -> None:
         Fully-qualified ``module.path:ClassName`` reference.
     """
     if ":" not in dotted_path:
-        raise ConfigError(
-            f"dotted_path must be 'module.path:ClassName', got {dotted_path!r}"
-        )
+        raise ConfigError(f"dotted_path must be 'module.path:ClassName', got {dotted_path!r}")
     CONNECTOR_MAP[name] = dotted_path
     logger.info("Registered connector %r -> %r", name, dotted_path)

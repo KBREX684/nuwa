@@ -169,9 +169,7 @@ class ParallelEvaluationStage:
     async def execute(self, context: LoopContext) -> LoopContext:
         """Score every result using the multi-judge ensemble."""
         if not context.train_results:
-            logger.warning(
-                "Round %d: no train_results to evaluate.", context.round_num
-            )
+            logger.warning("Round %d: no train_results to evaluate.", context.round_num)
             context.train_scores = ScoreCard(results=[], failure_analysis="")
             return context
 
@@ -252,9 +250,7 @@ class ParallelValidationStage:
                 "Round %d: val_set is empty, skipping validation.",
                 context.round_num,
             )
-            context.val_scores = ScoreCard(
-                results=[], failure_analysis="no validation samples"
-            )
+            context.val_scores = ScoreCard(results=[], failure_analysis="no validation samples")
             return context
 
         logger.info(
@@ -277,9 +273,7 @@ class ParallelValidationStage:
             card = await evaluator.evaluate_batch(exec_results)
         else:
             # Fallback: single-judge scoring using context backend.
-            card = await self._score_with_context_backend(
-                context, exec_results
-            )
+            card = await self._score_with_context_backend(context, exec_results)
 
         context.val_scores = card
 
@@ -308,9 +302,7 @@ class ParallelValidationStage:
         backend = context.backend_ref
         sem = asyncio.Semaphore(10)
 
-        async def _score_one(
-            sample: EvalSample, response: AgentResponse
-        ) -> ScoredResult:
+        async def _score_one(sample: EvalSample, response: AgentResponse) -> ScoredResult:
             async with sem:
                 prompt = _SCORING_TEMPLATE.render(
                     input_text=sample.input_text,
@@ -335,9 +327,7 @@ class ParallelValidationStage:
                     score = max(0.0, min(1.0, score))
                     reasoning_en = data.get("reasoning_en", "")
                     reasoning_zh = data.get("reasoning_zh", "")
-                    reasoning = str(
-                        reasoning_en or reasoning_zh or "(no reasoning)"
-                    )
+                    reasoning = str(reasoning_en or reasoning_zh or "(no reasoning)")
                 except (LLMError, KeyError, TypeError, ValueError) as exc:
                     logger.warning("Validation scoring failed: %s", exc)
                     score = 0.0
@@ -351,18 +341,13 @@ class ParallelValidationStage:
                 )
 
         scored: list[ScoredResult] = list(
-            await asyncio.gather(
-                *(_score_one(sample, resp) for sample, resp in results)
-            )
+            await asyncio.gather(*(_score_one(sample, resp) for sample, resp in results))
         )
 
         failures = [s for s in scored if s.score < _PASS_THRESHOLD]
         failure_analysis = ""
         if failures:
-            lines = [
-                f"- [{f.score:.2f}] input={f.sample.input_text[:80]!r}"
-                for f in failures
-            ]
+            lines = [f"- [{f.score:.2f}] input={f.sample.input_text[:80]!r}" for f in failures]
             failure_analysis = (
                 f"Validation: {len(failures)}/{len(scored)} below "
                 f"{_PASS_THRESHOLD}:\n" + "\n".join(lines)

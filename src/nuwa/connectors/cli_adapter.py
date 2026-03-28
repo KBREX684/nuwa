@@ -119,9 +119,8 @@ class CliAdapter:
             stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
 
             if proc.returncode != 0:
-                error_msg = (
-                    f"Process exited with code {proc.returncode}"
-                    + (f": {stderr_text}" if stderr_text else "")
+                error_msg = f"Process exited with code {proc.returncode}" + (
+                    f": {stderr_text}" if stderr_text else ""
                 )
                 logger.warning("CLI adapter: %s", error_msg)
                 return AgentResponse(

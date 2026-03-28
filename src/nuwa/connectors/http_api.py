@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Latency helper
 # ---------------------------------------------------------------------------
 
+
 class _LatencyTimer:
     """Tiny context-manager for measuring wall-clock milliseconds."""
 
@@ -34,6 +35,7 @@ class _LatencyTimer:
 # ---------------------------------------------------------------------------
 # HttpApiAdapter
 # ---------------------------------------------------------------------------
+
 
 class HttpApiAdapter:
     """Sends requests to a remote agent exposed as an HTTP/JSON endpoint.
@@ -138,7 +140,9 @@ class HttpApiAdapter:
             if resp.status >= 400:
                 error_detail = body.get("error", body.get("detail", resp.reason))
                 logger.warning(
-                    "Agent returned HTTP %s: %s", resp.status, error_detail,
+                    "Agent returned HTTP %s: %s",
+                    resp.status,
+                    error_detail,
                 )
                 return AgentResponse(
                     output_text="",
@@ -181,8 +185,7 @@ class HttpApiAdapter:
         self._cached_config = dict(config)
         if self._config_endpoint:
             logger.info(
-                "Config endpoint configured (%s) — "
-                "use async_apply_config() for remote push.",
+                "Config endpoint configured (%s) — use async_apply_config() for remote push.",
                 self._config_endpoint,
             )
 
@@ -215,7 +218,9 @@ class HttpApiAdapter:
                 if resp.status >= 400:
                     body = await resp.text()
                     logger.warning(
-                        "Config push returned HTTP %s: %s", resp.status, body,
+                        "Config push returned HTTP %s: %s",
+                        resp.status,
+                        body,
                     )
         except Exception as exc:
             logger.error("Failed to push config to %s: %s", self._config_endpoint, exc)

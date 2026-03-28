@@ -44,9 +44,9 @@ class ApprovalPhase:
 
         # -- Before / after config diff ------------------------------------
         if result.rounds:
-            original_cfg = result.rounds[0].mutation.original_config if (
-                result.rounds[0].mutation
-            ) else {}
+            original_cfg = (
+                result.rounds[0].mutation.original_config if (result.rounds[0].mutation) else {}
+            )
             renderer.diff_display(original_cfg, result.final_config)
 
         # -- Score improvement ---------------------------------------------
@@ -116,9 +116,11 @@ class ApprovalPhase:
             return
 
         # Collect all scored results from the best round
-        best_round = result.rounds[result.best_round] if (
-            result.best_round < len(result.rounds)
-        ) else result.rounds[-1]
+        best_round = (
+            result.rounds[result.best_round]
+            if (result.best_round < len(result.rounds))
+            else result.rounds[-1]
+        )
 
         scored = sorted(
             best_round.train_scores.results,

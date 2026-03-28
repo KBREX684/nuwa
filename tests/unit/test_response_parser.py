@@ -17,7 +17,7 @@ class TestParseJsonResponse:
         assert result == {"key": "value", "num": 42}
 
     def test_plain_json_array(self) -> None:
-        raw = '[1, 2, 3]'
+        raw = "[1, 2, 3]"
         result = parse_json_response(raw)
         assert result == [1, 2, 3]
 

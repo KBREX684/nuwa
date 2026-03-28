@@ -70,9 +70,7 @@ class DatasetGenStage:
         raw_data = parse_json_response(raw_response)
 
         if not isinstance(raw_data, list):
-            raise LLMError(
-                f"Expected a JSON array of samples, got {type(raw_data).__name__}."
-            )
+            raise LLMError(f"Expected a JSON array of samples, got {type(raw_data).__name__}.")
 
         samples: list[EvalSample] = []
         for idx, item in enumerate(raw_data):
@@ -90,9 +88,7 @@ class DatasetGenStage:
                     )
                 )
             except (KeyError, TypeError) as exc:
-                logger.warning(
-                    "Skipping malformed sample at index %d: %s", idx, exc
-                )
+                logger.warning("Skipping malformed sample at index %d: %s", idx, exc)
 
         if not samples:
             raise LLMError("LLM produced zero valid samples.")
@@ -106,7 +102,9 @@ class DatasetGenStage:
             logger.warning(
                 "Round %d: val_set is empty after split (split_idx=%d, total=%d). "
                 "Using last sample as validation.",
-                context.round_num, split_idx, len(samples),
+                context.round_num,
+                split_idx,
+                len(samples),
             )
             context.val_set = [samples[-1]] if samples else []
 

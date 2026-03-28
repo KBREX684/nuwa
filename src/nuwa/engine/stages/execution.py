@@ -7,7 +7,7 @@ import logging
 import time
 
 from nuwa.core.defaults import DEFAULT_MAX_CONCURRENCY, INVOKE_TIMEOUT_S
-from nuwa.core.exceptions import ConfigError, ConnectorError, LLMError
+from nuwa.core.exceptions import ConfigError, LLMError
 from nuwa.core.types import AgentResponse, EvalSample, LoopContext, ScoredResult
 
 logger = logging.getLogger(__name__)
@@ -45,9 +45,7 @@ class ExecutionStage:
                     return sample, response
                 except TimeoutError:
                     elapsed_ms = (time.perf_counter() - start) * 1000.0
-                    logger.warning(
-                        "Sample %s timed out after %.0f ms", sample.id, elapsed_ms
-                    )
+                    logger.warning("Sample %s timed out after %.0f ms", sample.id, elapsed_ms)
                     return sample, AgentResponse(
                         output_text="[ERROR: agent timed out]",
                         latency_ms=elapsed_ms,

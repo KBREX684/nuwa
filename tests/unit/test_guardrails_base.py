@@ -6,7 +6,9 @@ from nuwa.core.types import GuardrailVerdict, Reflection, RoundResult, ScoreCard
 from nuwa.guardrails.base import BaseGuardrail, CompositeGuardrail
 
 
-def _make_round(round_num: int, train_mean: float = 0.0, val_mean: float | None = None) -> RoundResult:
+def _make_round(
+    round_num: int, train_mean: float = 0.0, val_mean: float | None = None
+) -> RoundResult:
     """Helper to build a minimal RoundResult for testing."""
     train = ScoreCard(results=[], failure_analysis="")
     val = ScoreCard(results=[], failure_analysis="") if val_mean is not None else None
@@ -107,6 +109,7 @@ class TestCompositeGuardrail:
 
     def test_second_fails_not_returned_if_first_passes(self) -> None:
         """When first passes but second fails, the second's verdict is returned."""
+
         class AlwaysPass(BaseGuardrail):
             def check(self, history: list[RoundResult]) -> GuardrailVerdict:
                 return GuardrailVerdict(
@@ -138,6 +141,7 @@ class TestCompositeGuardrail:
 
     def test_should_stop_propagated(self) -> None:
         """If a passing child sets should_stop=True, it propagates."""
+
         class StopButPass(BaseGuardrail):
             def check(self, history: list[RoundResult]) -> GuardrailVerdict:
                 return GuardrailVerdict(

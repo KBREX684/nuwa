@@ -144,8 +144,7 @@ class NuwaTrainer:
             training_direction = direction
         if not training_direction:
             raise ValueError(
-                "training_direction is required. "
-                "Pass training_direction='...' or direction='...'."
+                "training_direction is required. Pass training_direction='...' or direction='...'."
             )
         if api_key is not None and llm_api_key is None:
             llm_api_key = api_key
@@ -171,9 +170,7 @@ class NuwaTrainer:
             self._target = _wrap_as_target_agent(agent)
 
         # Snapshot the original config for sandbox / discard.
-        self._original_config: dict[str, Any] = copy.deepcopy(
-            self._target.get_current_config()
-        )
+        self._original_config: dict[str, Any] = copy.deepcopy(self._target.get_current_config())
 
         # Build the LLM backend.
         self._backend = LiteLLMBackend(
@@ -274,9 +271,7 @@ class NuwaTrainer:
             If :meth:`run` has not been called yet, or no best config exists.
         """
         if self._result is None:
-            raise RuntimeError(
-                "Cannot promote before training. Call await trainer.run() first."
-            )
+            raise RuntimeError("Cannot promote before training. Call await trainer.run() first.")
 
         best = self._result.final_config
         if not best:
@@ -337,7 +332,7 @@ class NuwaTrainer:
         """Clean up resources (e.g. sandbox session) when used as a context manager."""
         if self._sandbox_manager is not None:
             try:
-                self._sandbox_manager.discard()
+                self.discard()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Failed to clean up sandbox on exit: %s", exc)
             logger.debug("NuwaTrainer context exited, sandbox cleaned up.")

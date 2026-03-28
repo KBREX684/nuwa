@@ -182,9 +182,7 @@ class SandboxManager:
                 "original_config": original_config,
                 "status": "active",
             }
-            meta_path.write_text(
-                json.dumps(data, indent=2, default=str), encoding="utf-8"
-            )
+            meta_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
         except OSError:
             logger.exception("Failed to write session metadata for %s", session_id)
 
@@ -194,12 +192,7 @@ class SandboxManager:
         promoted_config: dict[str, Any],
     ) -> None:
         """Persist a promotion event to disk."""
-        record_path = (
-            self._project_dir
-            / "sandbox"
-            / sandboxed.session_id
-            / "promotion.json"
-        )
+        record_path = self._project_dir / "sandbox" / sandboxed.session_id / "promotion.json"
         try:
             data = {
                 "session_id": sandboxed.session_id,
@@ -208,9 +201,7 @@ class SandboxManager:
                 "promoted_config": promoted_config,
                 "diff": sandboxed.get_diff(),
             }
-            record_path.write_text(
-                json.dumps(data, indent=2, default=str), encoding="utf-8"
-            )
+            record_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
         except OSError:
             logger.exception(
                 "Failed to write promotion record for session %s",
@@ -219,12 +210,7 @@ class SandboxManager:
 
     def _write_discard_record(self, sandboxed: SandboxedAgent) -> None:
         """Persist a discard event to disk."""
-        record_path = (
-            self._project_dir
-            / "sandbox"
-            / sandboxed.session_id
-            / "discard.json"
-        )
+        record_path = self._project_dir / "sandbox" / sandboxed.session_id / "discard.json"
         try:
             data = {
                 "session_id": sandboxed.session_id,
@@ -232,9 +218,7 @@ class SandboxManager:
                 "mutation_count": sandboxed.mutation_count,
                 "diff_at_discard": sandboxed.get_diff(),
             }
-            record_path.write_text(
-                json.dumps(data, indent=2, default=str), encoding="utf-8"
-            )
+            record_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
         except OSError:
             logger.exception(
                 "Failed to write discard record for session %s",

@@ -193,9 +193,7 @@ class SandboxedAgent:
             else:
                 # Only one snapshot -- roll back to original.
                 self._sandbox_config = copy.deepcopy(self._original_config)
-                logger.info(
-                    "Sandbox %s: rolled back to original config", self._session_id
-                )
+                logger.info("Sandbox %s: rolled back to original config", self._session_id)
                 return copy.deepcopy(self._sandbox_config)
         else:
             target = None

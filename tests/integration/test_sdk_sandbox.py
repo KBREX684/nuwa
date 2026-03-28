@@ -77,64 +77,79 @@ class MockModelBackend:
         samples = []
         for i in range(10):
             diff = ["easy", "medium", "hard"][i % 3]
-            samples.append({
-                "input_text": f"Question {i+1}",
-                "expected_behavior": f"Good answer for {i+1}",
-                "difficulty": diff,
-                "tags": ["test"],
-            })
+            samples.append(
+                {
+                    "input_text": f"Question {i + 1}",
+                    "expected_behavior": f"Good answer for {i + 1}",
+                    "difficulty": diff,
+                    "tags": ["test"],
+                }
+            )
         return json.dumps(samples)
 
     def _scoring(self) -> str:
         import random
+
         random.seed(self._call_count)
         score = 0.4 + 0.1 * min(self._round_hint, 3) + random.random() * 0.3
         score = max(0.0, min(1.0, score))
-        return json.dumps({
-            "score": round(score, 3),
-            "reasoning_en": "ok",
-            "reasoning_zh": "ok",
-            "axis_scores": {
-                "correctness": round(score, 3),
-                "completeness": round(score, 3),
-                "format_compliance": 1.0,
-                "tone_style": round(score, 3),
-            },
-        })
+        return json.dumps(
+            {
+                "score": round(score, 3),
+                "reasoning_en": "ok",
+                "reasoning_zh": "ok",
+                "axis_scores": {
+                    "correctness": round(score, 3),
+                    "completeness": round(score, 3),
+                    "format_compliance": 1.0,
+                    "tone_style": round(score, 3),
+                },
+            }
+        )
 
     def _reflection(self) -> str:
-        return json.dumps({
-            "diagnosis_summary_en": "Needs more detail.",
-            "diagnosis_summary_zh": "needs more detail",
-            "failure_patterns": [{
-                "label_en": "Insufficient detail",
-                "label_zh": "detail",
-                "affected_samples": [1],
-                "root_cause": "prompt",
-                "severity": "high",
-            }],
-            "proposed_changes": [{
-                "target": "system_prompt",
-                "description_en": "Be more detailed.",
-                "description_zh": "more detail",
-                "priority": "high",
-            }],
-        })
+        return json.dumps(
+            {
+                "diagnosis_summary_en": "Needs more detail.",
+                "diagnosis_summary_zh": "needs more detail",
+                "failure_patterns": [
+                    {
+                        "label_en": "Insufficient detail",
+                        "label_zh": "detail",
+                        "affected_samples": [1],
+                        "root_cause": "prompt",
+                        "severity": "high",
+                    }
+                ],
+                "proposed_changes": [
+                    {
+                        "target": "system_prompt",
+                        "description_en": "Be more detailed.",
+                        "description_zh": "more detail",
+                        "priority": "high",
+                    }
+                ],
+            }
+        )
 
     def _mutation(self) -> str:
-        return json.dumps({
-            "mutations": [{
-                "id": "mut-001",
-                "type": "config_change",
-                "description_en": "Increase detail",
-                "description_zh": "more detail",
-                "rationale_en": "fix",
-                "rationale_zh": "fix",
-                "config_path": "detail_level",
-                "config_value": "high",
-                "expected_impact": "high",
-            }],
-        })
+        return json.dumps(
+            {
+                "mutations": [
+                    {
+                        "id": "mut-001",
+                        "type": "config_change",
+                        "description_en": "Increase detail",
+                        "description_zh": "more detail",
+                        "rationale_en": "fix",
+                        "rationale_zh": "fix",
+                        "config_path": "detail_level",
+                        "config_value": "high",
+                        "expected_impact": "high",
+                    }
+                ],
+            }
+        )
 
 
 class MockTargetAgent:
@@ -249,17 +264,21 @@ class TestSandboxIsolation:
             assert isinstance(sandboxed, SandboxedAgent)
 
             # -- Apply mutations in the sandbox --
-            sandboxed.apply_config({
-                "system_prompt": "Mutated prompt v1",
-                "temperature": 0.9,
-                "nested": {"key": "changed"},
-            })
-            sandboxed.apply_config({
-                "system_prompt": "Mutated prompt v2",
-                "temperature": 0.95,
-                "nested": {"key": "changed_again"},
-                "new_key": "added",
-            })
+            sandboxed.apply_config(
+                {
+                    "system_prompt": "Mutated prompt v1",
+                    "temperature": 0.9,
+                    "nested": {"key": "changed"},
+                }
+            )
+            sandboxed.apply_config(
+                {
+                    "system_prompt": "Mutated prompt v2",
+                    "temperature": 0.95,
+                    "nested": {"key": "changed_again"},
+                    "new_key": "added",
+                }
+            )
 
             # Real agent must be UNCHANGED
             real_cfg = real_agent.get_current_config()
@@ -374,7 +393,9 @@ class TestSandboxDiff:
         entries = deep_diff({"a": 1}, {"a": 1})
         assert entries == []
         assert format_diff_text(entries) == "No differences."
-        assert "empty" in format_diff_html(entries).lower() or "No differences" in format_diff_html(entries)
+        assert "empty" in format_diff_html(entries).lower() or "No differences" in format_diff_html(
+            entries
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -527,8 +548,10 @@ class TestTrainSync:
             )
             assert isinstance(result, TrainingResult)
             assert len(result.rounds) > 0
-            print(f"  train_sync completed: {len(result.rounds)} round(s), "
-                  f"best_val={result.best_val_score:.4f}")
+            print(
+                f"  train_sync completed: {len(result.rounds)} round(s), "
+                f"best_val={result.best_val_score:.4f}"
+            )
         finally:
             trainer_mod.LiteLLMBackend = OriginalBackend
 

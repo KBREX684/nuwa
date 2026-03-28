@@ -58,8 +58,7 @@ def test_function_connector_supports_module_reference(tmp_path: Path) -> None:
     """Registry should accept module-path strings for function connectors."""
     module_file = tmp_path / "demo_agent.py"
     module_file.write_text(
-        "def run_agent(input_text, config=None):\n"
-        "    return {'output': f'echo:{input_text}'}\n",
+        "def run_agent(input_text, config=None):\n    return {'output': f'echo:{input_text}'}\n",
         encoding="utf-8",
     )
     sys.path.insert(0, str(tmp_path))

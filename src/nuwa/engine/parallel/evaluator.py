@@ -181,17 +181,14 @@ class ParallelEvaluator:
         # Run all judges concurrently -- each judge returns a list of
         # per-sample scores.
         logger.info(
-            "ParallelEvaluator: scoring %d samples with %d judges "
-            "(strategy=%s)",
+            "ParallelEvaluator: scoring %d samples with %d judges (strategy=%s)",
             len(results),
             num_judges,
             self._strategy.value,
         )
 
         judge_scores: list[list[float]] = list(
-            await asyncio.gather(
-                *(_judge_with_progress(j) for j in self._judges)
-            )
+            await asyncio.gather(*(_judge_with_progress(j) for j in self._judges))
         )
 
         # --- Aggregate column-wise (per sample) --------------------------
@@ -202,9 +199,7 @@ class ParallelEvaluator:
             sample, response = results[idx]
 
             # Collect this sample's scores from every judge.
-            per_judge: list[float] = [
-                judge_scores[j][idx] for j in range(num_judges)
-            ]
+            per_judge: list[float] = [judge_scores[j][idx] for j in range(num_judges)]
 
             # Aggregate LLM ensemble score.
             ensemble_score = self._aggregate(per_judge)
@@ -214,20 +209,14 @@ class ParallelEvaluator:
             immutable_agg = self._immutable_scorer.aggregate(immutable_metrics)
 
             # Blend LLM ensemble with immutable score.
-            final_score = (
-                self._llm_weight * ensemble_score
-                + self._immutable_weight * immutable_agg
-            )
+            final_score = self._llm_weight * ensemble_score + self._immutable_weight * immutable_agg
             final_score = max(0.0, min(1.0, final_score))
 
             # Build transparent reasoning with per-judge breakdown.
             judge_parts = ", ".join(
-                f"{self._judges[j].name}: {per_judge[j]:.2f}"
-                for j in range(num_judges)
+                f"{self._judges[j].name}: {per_judge[j]:.2f}" for j in range(num_judges)
             )
-            metrics_summary = " | ".join(
-                f"{k}={v:.2f}" for k, v in immutable_metrics.items()
-            )
+            metrics_summary = " | ".join(f"{k}={v:.2f}" for k, v in immutable_metrics.items())
             reasoning = (
                 f"{judge_parts}, ensemble({self._strategy.value}): "
                 f"{ensemble_score:.2f} "
@@ -261,14 +250,9 @@ class ParallelEvaluator:
 
         logger.info(
             "ParallelEvaluator: mean=%.3f  pass_rate=%.2f  failures=%d/%d",
+            (sum(s.score for s in scored_results) / len(scored_results) if scored_results else 0.0),
             (
-                sum(s.score for s in scored_results) / len(scored_results)
-                if scored_results
-                else 0.0
-            ),
-            (
-                sum(1 for s in scored_results if s.score >= _PASS_THRESHOLD)
-                / len(scored_results)
+                sum(1 for s in scored_results if s.score >= _PASS_THRESHOLD) / len(scored_results)
                 if scored_results
                 else 0.0
             ),
@@ -298,27 +282,14 @@ class ParallelEvaluator:
             Per-sample scores in the same order as *results*.
         """
         sem = asyncio.Semaphore(_JUDGE_CONCURRENCY)
-        template = (
-            Template(judge.scoring_prompt)
-            if judge.scoring_prompt
-            else _SCORING_TEMPLATE
-        )
+        template = Template(judge.scoring_prompt) if judge.scoring_prompt else _SCORING_TEMPLATE
 
-        async def _score_one(
-            sample: EvalSample, response: AgentResponse
-        ) -> float:
+        async def _score_one(sample: EvalSample, response: AgentResponse) -> float:
             async with sem:
-                return await self._call_judge(
-                    judge, template, sample, response
-                )
+                return await self._call_judge(judge, template, sample, response)
 
         scores: list[float] = list(
-            await asyncio.gather(
-                *(
-                    _score_one(sample, response)
-                    for sample, response in results
-                )
-            )
+            await asyncio.gather(*(_score_one(sample, response) for sample, response in results))
         )
 
         logger.debug(
@@ -387,9 +358,7 @@ class ParallelEvaluator:
             total_weight = sum(j.weight for j in self._judges)
             if total_weight == 0:
                 return 0.0
-            weighted_sum = sum(
-                s * j.weight for s, j in zip(scores, self._judges)
-            )
+            weighted_sum = sum(s * j.weight for s, j in zip(scores, self._judges))
             return weighted_sum / total_weight
 
         if self._strategy == EnsembleStrategy.MAJORITY:

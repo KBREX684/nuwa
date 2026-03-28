@@ -84,9 +84,7 @@ class NuwaConfig(BaseModel):
     def _validate_connector_params(self) -> NuwaConfig:
         """Ensure required connector params are present for the chosen type."""
         if self.connector_type == "http" and "url" not in self.connector_params:
-            logger.warning(
-                "connector_type is 'http' but 'url' is missing from connector_params."
-            )
+            logger.warning("connector_type is 'http' but 'url' is missing from connector_params.")
         if self.connector_type == "cli" and "command" not in self.connector_params:
             logger.warning(
                 "connector_type is 'cli' but 'command' is missing from connector_params."
@@ -117,9 +115,7 @@ class NuwaConfig(BaseModel):
         text = Path(path).read_text(encoding="utf-8")
         loaded = yaml.safe_load(text)
         if not isinstance(loaded, dict):
-            raise ValueError(
-                f"Expected a YAML mapping in {path}, got {type(loaded).__name__}"
-            )
+            raise ValueError(f"Expected a YAML mapping in {path}, got {type(loaded).__name__}")
         data = cast(dict[str, Any], loaded)
         return cls.model_validate(data)
 

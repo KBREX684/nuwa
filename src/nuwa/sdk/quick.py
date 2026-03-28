@@ -110,8 +110,7 @@ async def train(
         )
     elif auto_promote:
         logger.info(
-            "Auto-promote skipped: best_val_score=%.4f < threshold=%.4f. "
-            "Original config retained.",
+            "Auto-promote skipped: best_val_score=%.4f < threshold=%.4f. Original config retained.",
             result.best_val_score,
             promote_threshold,
         )

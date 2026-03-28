@@ -79,11 +79,9 @@ async def test_e2e_full_loop_completes() -> None:
     assert result is not None
     # Scheduler returns e.g. "max_rounds (2) reached" or "converged: ..."
     sr = result.stop_reason
-    assert (
-        "max_rounds" in sr
-        or "converged" in sr
-        or "target" in sr
-    ), f"Unexpected stop_reason: {sr}"
+    assert "max_rounds" in sr or "converged" in sr or "target" in sr, (
+        f"Unexpected stop_reason: {sr}"
+    )
     assert len(result.rounds) > 0
     assert len(result.rounds) <= 2
 

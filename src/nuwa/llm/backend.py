@@ -127,9 +127,7 @@ class LiteLLMBackend:
         try:
             content: str = response.choices[0].message.content
         except (IndexError, AttributeError) as exc:
-            raise LLMError(
-                "LLM response did not contain a valid message."
-            ) from exc
+            raise LLMError("LLM response did not contain a valid message.") from exc
 
         if content is None:
             raise LLMError("LLM returned a null content field.")
@@ -242,8 +240,7 @@ class LiteLLMBackend:
                     if self._cb_failures >= _CB_FAILURE_THRESHOLD:
                         self._cb_open_until = time.monotonic() + _CB_RECOVERY_TIMEOUT_S
                         logger.error(
-                            "Circuit breaker tripped after %d failures. "
-                            "Blocking calls for %.0fs.",
+                            "Circuit breaker tripped after %d failures. Blocking calls for %.0fs.",
                             self._cb_failures,
                             _CB_RECOVERY_TIMEOUT_S,
                         )
@@ -263,14 +260,9 @@ class LiteLLMBackend:
                         await asyncio.sleep(delay)
                         backoff *= _BACKOFF_MULTIPLIER
                     continue
-                raise LLMError(
-                    f"LLM call failed with non-retryable error: {exc}"
-                ) from exc
+                raise LLMError(f"LLM call failed with non-retryable error: {exc}") from exc
 
-        raise LLMError(
-            f"LLM call failed after {_MAX_RETRIES} attempts. "
-            f"Last error: {last_exc}"
-        )
+        raise LLMError(f"LLM call failed after {_MAX_RETRIES} attempts. Last error: {last_exc}")
 
     def _log_usage(self, response: Any) -> None:
         """Extract and log token-usage information from a completion response."""

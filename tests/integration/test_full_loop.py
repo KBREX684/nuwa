@@ -33,6 +33,7 @@ from nuwa.persistence.run_log import RunLog
 # Mock model backend
 # ---------------------------------------------------------------------------
 
+
 class MockModelBackend:
     """Mock LLM backend that returns canned JSON responses based on prompt content."""
 
@@ -77,12 +78,14 @@ class MockModelBackend:
         samples = []
         for i in range(10):
             diff = difficulties[i % 3]
-            samples.append({
-                "input_text": f"Test question {i + 1}: Explain concept {i + 1} clearly.",
-                "expected_behavior": f"A clear, structured explanation of concept {i + 1} with examples.",
-                "difficulty": diff,
-                "tags": ["test", f"concept-{i + 1}", diff],
-            })
+            samples.append(
+                {
+                    "input_text": f"Test question {i + 1}: Explain concept {i + 1} clearly.",
+                    "expected_behavior": f"A clear, structured explanation of concept {i + 1} with examples.",
+                    "difficulty": diff,
+                    "tags": ["test", f"concept-{i + 1}", diff],
+                }
+            )
         return json.dumps(samples)
 
     def _scoring_response(self, content: str) -> str:
@@ -98,6 +101,7 @@ class MockModelBackend:
         So we use a wider range of base scores (0.1 - 0.8).
         """
         import random
+
         random.seed(self._call_count)
 
         # Base score improves per round but keeps some low values
@@ -105,87 +109,94 @@ class MockModelBackend:
         score = base + random.random() * 0.5
         score = max(0.0, min(1.0, score))
 
-        return json.dumps({
-            "score": round(score, 3),
-            "reasoning_en": f"The output demonstrates understanding (score={score:.3f}).",
-            "reasoning_zh": f"输出展示了理解 (得分={score:.3f}).",
-            "axis_scores": {
-                "correctness": round(min(1.0, score + 0.05), 3),
-                "completeness": round(max(0.0, score - 0.05), 3),
-                "format_compliance": 1.0,
-                "tone_style": round(score, 3),
-            },
-        })
+        return json.dumps(
+            {
+                "score": round(score, 3),
+                "reasoning_en": f"The output demonstrates understanding (score={score:.3f}).",
+                "reasoning_zh": f"输出展示了理解 (得分={score:.3f}).",
+                "axis_scores": {
+                    "correctness": round(min(1.0, score + 0.05), 3),
+                    "completeness": round(max(0.0, score - 0.05), 3),
+                    "format_compliance": 1.0,
+                    "tone_style": round(score, 3),
+                },
+            }
+        )
 
     def _reflection_response(self, content: str) -> str:
         """Return a structured reflection with diagnosis."""
-        return json.dumps({
-            "diagnosis_summary_en": "Some outputs lack sufficient detail and miss edge cases.",
-            "diagnosis_summary_zh": "部分输出缺乏足够细节，遗漏了边缘情况。",
-            "failure_patterns": [
-                {
-                    "label_en": "Insufficient detail",
-                    "label_zh": "细节不足",
-                    "affected_samples": [1, 3, 5],
-                    "root_cause": "System prompt does not emphasize thoroughness.",
-                    "severity": "high",
-                },
-                {
-                    "label_en": "Missing examples",
-                    "label_zh": "缺少示例",
-                    "affected_samples": [2, 4],
-                    "root_cause": "No instruction to include concrete examples.",
-                    "severity": "medium",
-                },
-            ],
-            "proposed_changes": [
-                {
-                    "target": "system_prompt",
-                    "description_en": "Add instruction to provide detailed explanations with examples.",
-                    "description_zh": "添加提供详细解释和示例的指令。",
-                    "priority": "high",
-                },
-                {
-                    "target": "config",
-                    "description_en": "Increase temperature slightly for more creative responses.",
-                    "description_zh": "稍微提高温度以获得更有创意的回复。",
-                    "priority": "medium",
-                },
-            ],
-        })
+        return json.dumps(
+            {
+                "diagnosis_summary_en": "Some outputs lack sufficient detail and miss edge cases.",
+                "diagnosis_summary_zh": "部分输出缺乏足够细节，遗漏了边缘情况。",
+                "failure_patterns": [
+                    {
+                        "label_en": "Insufficient detail",
+                        "label_zh": "细节不足",
+                        "affected_samples": [1, 3, 5],
+                        "root_cause": "System prompt does not emphasize thoroughness.",
+                        "severity": "high",
+                    },
+                    {
+                        "label_en": "Missing examples",
+                        "label_zh": "缺少示例",
+                        "affected_samples": [2, 4],
+                        "root_cause": "No instruction to include concrete examples.",
+                        "severity": "medium",
+                    },
+                ],
+                "proposed_changes": [
+                    {
+                        "target": "system_prompt",
+                        "description_en": "Add instruction to provide detailed explanations with examples.",
+                        "description_zh": "添加提供详细解释和示例的指令。",
+                        "priority": "high",
+                    },
+                    {
+                        "target": "config",
+                        "description_en": "Increase temperature slightly for more creative responses.",
+                        "description_zh": "稍微提高温度以获得更有创意的回复。",
+                        "priority": "medium",
+                    },
+                ],
+            }
+        )
 
     def _mutation_response(self, content: str) -> str:
         """Return a mutation proposal with config changes."""
-        return json.dumps({
-            "mutations": [
-                {
-                    "id": "mut-001",
-                    "type": "config_change",
-                    "description_en": "Increase detail level in responses",
-                    "description_zh": "增加响应中的细节级别",
-                    "rationale_en": "Addresses the insufficient detail failure pattern.",
-                    "rationale_zh": "解决细节不足的失败模式。",
-                    "config_path": "detail_level",
-                    "config_value": "high",
-                    "expected_impact": "high",
-                },
-                {
-                    "id": "mut-002",
-                    "type": "prompt_insert",
-                    "description_en": "Add examples instruction to system prompt",
-                    "description_zh": "向系统提示添加示例指令",
-                    "rationale_en": "Encourages the agent to include concrete examples.",
-                    "rationale_zh": "鼓励代理包含具体示例。",
-                    "new_text": "Always include at least one concrete example in your response.",
-                    "expected_impact": "medium",
-                },
-            ],
-        })
+        return json.dumps(
+            {
+                "mutations": [
+                    {
+                        "id": "mut-001",
+                        "type": "config_change",
+                        "description_en": "Increase detail level in responses",
+                        "description_zh": "增加响应中的细节级别",
+                        "rationale_en": "Addresses the insufficient detail failure pattern.",
+                        "rationale_zh": "解决细节不足的失败模式。",
+                        "config_path": "detail_level",
+                        "config_value": "high",
+                        "expected_impact": "high",
+                    },
+                    {
+                        "id": "mut-002",
+                        "type": "prompt_insert",
+                        "description_en": "Add examples instruction to system prompt",
+                        "description_zh": "向系统提示添加示例指令",
+                        "rationale_en": "Encourages the agent to include concrete examples.",
+                        "rationale_zh": "鼓励代理包含具体示例。",
+                        "new_text": "Always include at least one concrete example in your response.",
+                        "expected_impact": "medium",
+                    },
+                ],
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
 # Mock target agent
 # ---------------------------------------------------------------------------
+
 
 class MockTargetAgent:
     """Mock agent that subtly improves output quality after config changes."""
@@ -215,7 +226,9 @@ class MockTargetAgent:
 
         base_output = f"Here is the answer to: {input_text[:60]}"
         if quality_boost > 0.1:
-            base_output += " This is a detailed response with concrete examples and thorough explanation."
+            base_output += (
+                " This is a detailed response with concrete examples and thorough explanation."
+            )
         else:
             base_output += " The answer covers the main points."
 
@@ -237,6 +250,7 @@ class MockTargetAgent:
 # Callback for progress tracking
 # ---------------------------------------------------------------------------
 
+
 class ProgressTracker:
     """Collects round-by-round progress for test assertions and summary."""
 
@@ -245,12 +259,8 @@ class ProgressTracker:
 
     def __call__(self, round_result: RoundResult, context: Any) -> None:
         train_mean = round_result.train_scores.mean_score
-        val_mean = (
-            round_result.val_scores.mean_score if round_result.val_scores else None
-        )
-        mutation_desc = (
-            round_result.mutation.description if round_result.mutation else "none"
-        )
+        val_mean = round_result.val_scores.mean_score if round_result.val_scores else None
+        mutation_desc = round_result.mutation.description if round_result.mutation else "none"
         event = {
             "round": round_result.round_num,
             "train_score": train_mean,
@@ -331,7 +341,9 @@ async def test_full_training_loop() -> None:
     # ---- Assertions on TrainingResult ----
     assert isinstance(result, TrainingResult)
     assert len(result.rounds) > 0, "Expected at least one round"
-    assert result.best_val_score > 0.0, f"Expected positive best_val_score, got {result.best_val_score}"
+    assert result.best_val_score > 0.0, (
+        f"Expected positive best_val_score, got {result.best_val_score}"
+    )
     assert result.stop_reason, "Expected a non-empty stop_reason"
     assert result.best_round >= 0
     assert result.total_duration_s > 0.0
@@ -401,7 +413,9 @@ def _make_dummy_round(round_num: int, train_score: float, val_score: float) -> R
 
     train_card = ScoreCard(results=[scored], failure_analysis="")
 
-    val_scored = ScoredResult(sample=sample, response=response, score=val_score, reasoning="test val")
+    val_scored = ScoredResult(
+        sample=sample, response=response, score=val_score, reasoning="test val"
+    )
     val_card = ScoreCard(results=[val_scored], failure_analysis="")
 
     reflection = Reflection(

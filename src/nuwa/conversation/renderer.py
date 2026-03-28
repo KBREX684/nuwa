@@ -55,15 +55,12 @@ class NuwaRenderer:
     def warning(self, msg: str) -> None:
         """Print a warning in amber/yellow."""
         self.console.print(
-            f"[bold dark_orange]⚠ 警告:[/bold dark_orange] "
-            f"[dark_orange]{escape(msg)}[/dark_orange]"
+            f"[bold dark_orange]⚠ 警告:[/bold dark_orange] [dark_orange]{escape(msg)}[/dark_orange]"
         )
 
     def success(self, msg: str) -> None:
         """Print a success message in green."""
-        self.console.print(
-            f"[bold green]✓ 成功:[/bold green] [green]{escape(msg)}[/green]"
-        )
+        self.console.print(f"[bold green]✓ 成功:[/bold green] [green]{escape(msg)}[/green]")
 
     # ------------------------------------------------------------------
     # Round summary table
@@ -121,15 +118,12 @@ class NuwaRenderer:
 
         # Text-based sparkline of historical train scores
         if context.history:
-            scores = [
-                r.train_scores.mean_score for r in context.history
-            ]
+            scores = [r.train_scores.mean_score for r in context.history]
             self._spark_chart(scores, label="训练均分趋势")
 
         if context.reflection:
             self.console.print(
-                f"  [dim]最新诊断:[/dim] "
-                f"{escape(context.reflection.diagnosis[:100])}"
+                f"  [dim]最新诊断:[/dim] {escape(context.reflection.diagnosis[:100])}"
             )
 
     def _spark_chart(self, values: list[float], *, label: str = "") -> None:

@@ -31,13 +31,18 @@ class MutationStage:
         reflection = context.reflection
 
         if reflection is None:
-            logger.warning("Round %d: no reflection available, skipping mutation.", context.round_num)
+            logger.warning(
+                "Round %d: no reflection available, skipping mutation.", context.round_num
+            )
             context.proposed_mutation = None
             return context
 
         # If the reflection reports no issues, skip mutation.
         if reflection.priority == "low" and not reflection.failure_patterns:
-            logger.info("Round %d: reflection is low priority with no failures, skipping mutation.", context.round_num)
+            logger.info(
+                "Round %d: reflection is low priority with no failures, skipping mutation.",
+                context.round_num,
+            )
             context.proposed_mutation = None
             return context
 
@@ -107,12 +112,17 @@ class MutationStage:
                         if target_section and target_section in current_sys_prompt:
                             idx = current_sys_prompt.index(target_section) + len(target_section)
                             proposed_config["system_prompt"] = (
-                                current_sys_prompt[:idx] + "\n" + new_text + current_sys_prompt[idx:]
+                                current_sys_prompt[:idx]
+                                + "\n"
+                                + new_text
+                                + current_sys_prompt[idx:]
                             )
                         else:
                             proposed_config["system_prompt"] = current_sys_prompt + "\n" + new_text
                     elif mut_type == "prompt_delete" and old_text:
-                        proposed_config["system_prompt"] = current_sys_prompt.replace(old_text, "", 1)
+                        proposed_config["system_prompt"] = current_sys_prompt.replace(
+                            old_text, "", 1
+                        )
 
             mutation = Mutation(
                 description=" | ".join(descriptions) if descriptions else "LLM-proposed mutation",

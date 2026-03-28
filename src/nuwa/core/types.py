@@ -45,8 +45,7 @@ class TrainingConfig(BaseModel):
         default=0.15,
         ge=0.0,
         description=(
-            "Maximum allowed gap between train and validation scores "
-            "before overfitting is flagged."
+            "Maximum allowed gap between train and validation scores before overfitting is flagged."
         ),
     )
     consistency_runs: int = Field(
@@ -63,9 +62,7 @@ class TrainingConfig(BaseModel):
     regression_tolerance: float = Field(
         default=0.05,
         ge=0.0,
-        description=(
-            "Allowed score regression between rounds before a mutation is reverted."
-        ),
+        description=("Allowed score regression between rounds before a mutation is reverted."),
     )
     objectives: list[dict[str, Any]] | None = Field(
         default=None,
@@ -163,12 +160,11 @@ class ScoreCard(BaseModel):
     objective_scores: dict[str, float] | None = Field(
         default=None,
         description=(
-            "Optional per-objective score breakdown when multi-objective "
-            "optimisation is enabled."
+            "Optional per-objective score breakdown when multi-objective optimisation is enabled."
         ),
     )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def mean_score(self) -> float:
         """Arithmetic mean of all individual scores (0.0 when empty)."""
@@ -176,7 +172,7 @@ class ScoreCard(BaseModel):
             return 0.0
         return sum(r.score for r in self.results) / len(self.results)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def pass_rate(self) -> float:
         """Fraction of results whose score meets or exceeds the pass threshold."""

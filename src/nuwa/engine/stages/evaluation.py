@@ -103,12 +103,9 @@ class EvaluationStage:
                 score = max(0.0, min(1.0, score))
 
                 # Append immutable breakdown to reasoning for transparency
-                metrics_summary = " | ".join(
-                    f"{k}={v:.2f}" for k, v in immutable_metrics.items()
-                )
+                metrics_summary = " | ".join(f"{k}={v:.2f}" for k, v in immutable_metrics.items())
                 full_reasoning = (
-                    f"{reasoning} [immutable: {metrics_summary} "
-                    f"-> agg={immutable_agg:.2f}]"
+                    f"{reasoning} [immutable: {metrics_summary} -> agg={immutable_agg:.2f}]"
                 )
 
                 return ScoredResult(

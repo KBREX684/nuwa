@@ -155,9 +155,7 @@ class GitTracker:
         if not self._should_run():
             return []
 
-        result = self._run_git_output(
-            "log", "--oneline", "--grep=\\[round-", "--format=%H %s"
-        )
+        result = self._run_git_output("log", "--oneline", "--grep=\\[round-", "--format=%H %s")
         if result is None:
             return []
 
@@ -250,7 +248,4 @@ class GitTracker:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
-        return (
-            f"GitTracker(project_dir={self._project_dir!r}, "
-            f"enabled={self._enabled})"
-        )
+        return f"GitTracker(project_dir={self._project_dir!r}, enabled={self._enabled})"

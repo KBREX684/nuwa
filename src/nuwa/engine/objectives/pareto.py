@@ -55,9 +55,10 @@ class ParetoTracker:
         """Add a new point.  Returns ``True`` if it lies on the Pareto frontier."""
         weights = self._objectives.weights_dict()
         total_weight = sum(weights.values()) or 1.0
-        weighted = sum(
-            scores.get(n, 0.0) * weights.get(n, 1.0) for n in self._objectives.names()
-        ) / total_weight
+        weighted = (
+            sum(scores.get(n, 0.0) * weights.get(n, 1.0) for n in self._objectives.names())
+            / total_weight
+        )
 
         point = ParetoPoint(
             round_num=round_num,
@@ -106,7 +107,9 @@ class ParetoTracker:
         reverse = obj.direction == "maximize"
         return max(
             self._frontier,
-            key=lambda p: p.scores.get(objective_name, 0.0) if reverse else -p.scores.get(objective_name, 0.0),
+            key=lambda p: (
+                p.scores.get(objective_name, 0.0) if reverse else -p.scores.get(objective_name, 0.0)
+            ),
         )
 
     def best_weighted(self) -> ParetoPoint | None:

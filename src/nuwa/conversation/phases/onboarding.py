@@ -42,9 +42,7 @@ class OnboardingPhase:
 
         renderer.status("欢迎使用女娲 (Nuwa) AI Agent 训练系统！")
         console.print()
-        console.print(
-            "[cyan]让我们先完成基础设置。整个过程只需要几分钟。[/cyan]\n"
-        )
+        console.print("[cyan]让我们先完成基础设置。整个过程只需要几分钟。[/cyan]\n")
 
         # -- LLM selection -------------------------------------------------
         llm_model = await self._select_llm(console)
@@ -60,9 +58,7 @@ class OnboardingPhase:
             f"[bold]API 密钥:[/bold] {'已设置' if api_key else '未提供'}\n"
             f"[bold]连接器:[/bold] {connector_type}\n"
         )
-        console.print(
-            Panel(summary, title="基础设置摘要", border_style="cyan", expand=False)
-        )
+        console.print(Panel(summary, title="基础设置摘要", border_style="cyan", expand=False))
 
         if not Confirm.ask("[cyan]以上设置是否正确？[/cyan]", default=True, console=console):
             renderer.warning("请重新输入设置。")
@@ -111,9 +107,7 @@ class OnboardingPhase:
     async def _collect_api_key(self, console: Console, llm_model: str) -> str | None:
         console.print()
         provider = llm_model.split("/")[0] if "/" in llm_model else llm_model
-        console.print(
-            f"[cyan]需要为 [bold]{provider}[/bold] 提供 API 密钥。[/cyan]"
-        )
+        console.print(f"[cyan]需要为 [bold]{provider}[/bold] 提供 API 密钥。[/cyan]")
         console.print("[dim]（也可以稍后通过环境变量或配置文件设置）[/dim]")
 
         api_key = Prompt.ask(
@@ -128,9 +122,7 @@ class OnboardingPhase:
     # Connector
     # ------------------------------------------------------------------
 
-    async def _select_connector(
-        self, console: Console
-    ) -> tuple[str, dict[str, Any]]:
+    async def _select_connector(self, console: Console) -> tuple[str, dict[str, Any]]:
         console.print()
         console.print("[bold cyan]第二步：选择目标 Agent 连接方式[/bold cyan]\n")
         for key, (ctype, desc) in _CONNECTOR_OPTIONS.items():

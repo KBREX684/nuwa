@@ -35,6 +35,7 @@ app = typer.Typer(
 # Version callback
 # ------------------------------------------------------------------
 
+
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(f"女娲 Nuwa v{_VERSION}")
@@ -58,6 +59,7 @@ def _main(
 # ------------------------------------------------------------------
 # train (interactive)
 # ------------------------------------------------------------------
+
 
 @app.command("train")
 def train_cmd(
@@ -137,15 +139,11 @@ def train_cmd(
 
         # Save final result as JSON for `nuwa status`
         results_file = project_dir / "last_result.json"
-        results_file.write_text(
-            result.model_dump_json(indent=2), encoding="utf-8"
-        )
+        results_file.write_text(result.model_dump_json(indent=2), encoding="utf-8")
 
         # Save final config snapshot
         if result.final_config:
-            artifact_store.save_config_snapshot(
-                result.best_round, result.final_config
-            )
+            artifact_store.save_config_snapshot(result.best_round, result.final_config)
 
         # Show approval panel
         approval = ApprovalPhase()
@@ -157,6 +155,7 @@ def train_cmd(
 # ------------------------------------------------------------------
 # run (headless)
 # ------------------------------------------------------------------
+
 
 @app.command("run")
 def run_cmd(
@@ -254,9 +253,10 @@ def run_cmd(
 # web
 # ------------------------------------------------------------------
 
+
 @app.command("web")
 def web_cmd(
-    host: str = typer.Option("0.0.0.0", "--host", help="Web 服务监听地址。"),
+    host: str = typer.Option("0.0.0.0", "--host", help="Web 服务监听地址。"),  # nosec B104
     port: int = typer.Option(8080, "--port", "-p", help="Web 服务端口。"),
     reload: bool = typer.Option(False, "--reload", help="启用自动重载（开发模式）。"),
 ) -> None:
@@ -276,6 +276,7 @@ def web_cmd(
 # ------------------------------------------------------------------
 # status
 # ------------------------------------------------------------------
+
 
 @app.command("status")
 def status_cmd(
@@ -354,6 +355,7 @@ def status_cmd(
 # init
 # ------------------------------------------------------------------
 
+
 @app.command("init")
 def init_cmd(
     output: Path = typer.Option(
@@ -362,9 +364,7 @@ def init_cmd(
         "-o",
         help="输出配置文件路径。",
     ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="覆盖已存在的文件。"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="覆盖已存在的文件。"),
 ) -> None:
     """生成默认配置文件。"""
     from nuwa.config.schema import NuwaConfig

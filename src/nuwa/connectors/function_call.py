@@ -87,7 +87,8 @@ class FunctionCallAdapter:
                 else:
                     loop = asyncio.get_running_loop()
                     result = await loop.run_in_executor(
-                        None, lambda: self._func(input_text, **kwargs),
+                        None,
+                        lambda: self._func(input_text, **kwargs),
                     )
 
             output_text = self._normalise_output(result)
@@ -100,9 +101,7 @@ class FunctionCallAdapter:
 
         except Exception as exc:
             logger.error("Function %s raised: %s", self._func_name, exc)
-            raise ConnectorError(
-                f"Function {self._func_name} failed: {exc}"
-            ) from exc
+            raise ConnectorError(f"Function {self._func_name} failed: {exc}") from exc
 
     def get_current_config(self) -> dict[str, Any]:
         """Return a copy of the current configuration dict."""

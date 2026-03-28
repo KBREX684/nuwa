@@ -105,9 +105,7 @@ class TestConfigStore:
     def test_load_yaml(self, tmp_path: Path) -> None:
         cfg_path = tmp_path / "nuwa.yaml"
         cfg_path.write_text(
-            "llm_model: openai/gpt-4o\n"
-            "training_direction: Improve quality\n"
-            "max_rounds: 5\n",
+            "llm_model: openai/gpt-4o\ntraining_direction: Improve quality\nmax_rounds: 5\n",
             encoding="utf-8",
         )
         config = ConfigStore.load(cfg_path)

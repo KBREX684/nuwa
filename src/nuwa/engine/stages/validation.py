@@ -87,10 +87,7 @@ class ValidationStage:
             len(val_samples),
         )
 
-        tasks = [
-            _run_and_score(s.input_text, s.expected_behavior)
-            for s in val_samples
-        ]
+        tasks = [_run_and_score(s.input_text, s.expected_behavior) for s in val_samples]
         results = await asyncio.gather(*tasks)
 
         scored: list[ScoredResult] = []
@@ -121,10 +118,7 @@ class ValidationStage:
         failures = [s for s in scored if s.score < _PASS_THRESHOLD]
         failure_analysis = ""
         if failures:
-            lines = [
-                f"- [{f.score:.2f}] input={f.sample.input_text[:80]!r}"
-                for f in failures
-            ]
+            lines = [f"- [{f.score:.2f}] input={f.sample.input_text[:80]!r}" for f in failures]
             failure_analysis = (
                 f"Validation: {len(failures)}/{len(scored)} below {_PASS_THRESHOLD}:\n"
                 + "\n".join(lines)

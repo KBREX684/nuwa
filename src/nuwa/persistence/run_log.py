@@ -53,9 +53,7 @@ class RunLog:
         line = round_result.model_dump_json()
         with self._log_path.open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
-        logger.debug(
-            "Appended round %d to %s", round_result.round_num, self._log_path
-        )
+        logger.debug("Appended round %d to %s", round_result.round_num, self._log_path)
 
     def load_history(self) -> list[RoundResult]:
         """Read every round result from the JSONL file.
@@ -166,9 +164,7 @@ class RunLog:
 
             val_str = f"{val_score:.4f}" if val_score is not None else "N/A"
             ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            fh.write(
-                f"{round_num}\t{train_score:.4f}\t{val_str}\t{status}\t{safe_desc}\t{ts}\n"
-            )
+            fh.write(f"{round_num}\t{train_score:.4f}\t{val_str}\t{status}\t{safe_desc}\t{ts}\n")
 
         logger.debug("Appended round %d to %s", round_num, self._tsv_path)
 

@@ -47,9 +47,7 @@ class DirectionPhase:
             f"[bold]重点领域:[/bold] {focus_str}\n"
             f"[bold]最大轮数:[/bold] {max_rounds}\n"
         )
-        console.print(
-            Panel(summary, title="训练方向摘要", border_style="cyan", expand=False)
-        )
+        console.print(Panel(summary, title="训练方向摘要", border_style="cyan", expand=False))
 
         if not Confirm.ask("[cyan]以上方向是否正确？[/cyan]", default=True, console=console):
             renderer.warning("请重新输入训练方向。")
@@ -68,8 +66,8 @@ class DirectionPhase:
     async def _collect_direction(self, console: Console) -> str:
         console.print(
             "[cyan]请用自然语言描述您希望训练达到的目标。[/cyan]\n"
-            "[dim]例如: \"提升客服机器人对退货流程的回答准确度和礼貌程度\"[/dim]\n"
-            "[dim]例如: \"让代码助手生成更安全、更符合最佳实践的 Python 代码\"[/dim]"
+            '[dim]例如: "提升客服机器人对退货流程的回答准确度和礼貌程度"[/dim]\n'
+            '[dim]例如: "让代码助手生成更安全、更符合最佳实践的 Python 代码"[/dim]'
         )
         console.print()
 
@@ -114,16 +112,12 @@ class DirectionPhase:
             "[cyan]设置最大训练轮数。[/cyan]\n"
             "[dim]更多轮次通常能获得更好结果，但耗时更长。建议 5-20 轮。[/dim]"
         )
-        max_rounds = IntPrompt.ask(
-            "[cyan]最大轮数[/cyan]", default=10, console=console
-        )
+        max_rounds = IntPrompt.ask("[cyan]最大轮数[/cyan]", default=10, console=console)
         if max_rounds < 1:
             console.print("[dark_orange]轮数至少为 1，已自动修正。[/dark_orange]")
             max_rounds = 1
         elif max_rounds > 100:
-            console.print(
-                "[dark_orange]轮数较多 (>100)，训练可能耗时很长。[/dark_orange]"
-            )
+            console.print("[dark_orange]轮数较多 (>100)，训练可能耗时很长。[/dark_orange]")
             if not Confirm.ask("[cyan]确认继续？[/cyan]", default=False, console=console):
                 max_rounds = IntPrompt.ask(
                     "[cyan]请重新输入轮数[/cyan]", default=10, console=console

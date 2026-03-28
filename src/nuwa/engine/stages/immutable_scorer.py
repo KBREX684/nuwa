@@ -115,7 +115,7 @@ class ImmutableScorer:
                 return 0.0
 
         if self.expected_format.startswith("regex:"):
-            pattern = self.expected_format[len("regex:"):]
+            pattern = self.expected_format[len("regex:") :]
             try:
                 return 1.0 if re.search(pattern, output) else 0.0
             except re.error as exc:

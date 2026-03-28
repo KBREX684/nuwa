@@ -50,11 +50,7 @@ class TrainingScheduler:
         # 3. Convergence detection: look at the last N val scores.
         if len(context.history) >= _CONVERGENCE_WINDOW:
             recent = context.history[-_CONVERGENCE_WINDOW:]
-            val_scores = [
-                rr.val_scores.mean_score
-                for rr in recent
-                if rr.val_scores is not None
-            ]
+            val_scores = [rr.val_scores.mean_score for rr in recent if rr.val_scores is not None]
             if len(val_scores) >= _CONVERGENCE_WINDOW:
                 max_delta = max(val_scores) - min(val_scores)
                 if max_delta < _MIN_IMPROVEMENT:

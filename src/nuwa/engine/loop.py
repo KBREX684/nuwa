@@ -139,9 +139,7 @@ class TrainingLoop:
         try:
             for round_num in range(1, self._config.max_rounds + 1):
                 context.round_num = round_num
-                logger.info(
-                    "===== Round %d / %d =====", round_num, self._config.max_rounds
-                )
+                logger.info("===== Round %d / %d =====", round_num, self._config.max_rounds)
 
                 # Optionally adjust budget for this round.
                 budget = self._scheduler.get_round_budget(round_num)
@@ -213,9 +211,7 @@ class TrainingLoop:
                         context = await self._validation_stage.execute(context)
                     except (TrainingAborted, GuardrailTriggered) as exc:
                         stop_reason = f"aborted during validation: {exc}"
-                        logger.warning(
-                            "Training aborted in round %d: %s", round_num, exc
-                        )
+                        logger.warning("Training aborted in round %d: %s", round_num, exc)
                         active_target.apply_config(saved_config)
                         context.current_config = saved_config
                         break
@@ -230,17 +226,13 @@ class TrainingLoop:
                         active_target.apply_config(saved_config)
                         context.current_config = saved_config
                     except Exception:
-                        logger.exception(
-                            "Fatal unhandled error in validation round %d", round_num
-                        )
+                        logger.exception("Fatal unhandled error in validation round %d", round_num)
                         active_target.apply_config(saved_config)
                         context.current_config = saved_config
                         raise
 
                     # If validation failed (score regressed), rollback.
-                    val_mean = (
-                        context.val_scores.mean_score if context.val_scores else 0.0
-                    )
+                    val_mean = context.val_scores.mean_score if context.val_scores else 0.0
                     regression = context.best_val_score - val_mean
                     if (
                         regression > self._config.regression_tolerance
@@ -268,9 +260,7 @@ class TrainingLoop:
                         context = await self._validation_stage.execute(context)
                     except (TrainingAborted, GuardrailTriggered) as exc:
                         stop_reason = f"aborted during validation: {exc}"
-                        logger.warning(
-                            "Training aborted in round %d: %s", round_num, exc
-                        )
+                        logger.warning("Training aborted in round %d: %s", round_num, exc)
                         break
                     except (LLMError, ConnectorError) as exc:
                         logger.error(
@@ -281,9 +271,7 @@ class TrainingLoop:
                             exc,
                         )
                     except Exception:
-                        logger.exception(
-                            "Fatal unhandled error in validation round %d", round_num
-                        )
+                        logger.exception("Fatal unhandled error in validation round %d", round_num)
                         raise
 
                 # Build RoundResult for this round.
@@ -310,9 +298,7 @@ class TrainingLoop:
                         config=context.current_config,
                         scores=objective_scores,
                     )
-                    round_result.pareto_frontier_size = len(
-                        self._pareto_tracker.frontier
-                    )
+                    round_result.pareto_frontier_size = len(self._pareto_tracker.frontier)
                     logger.info(
                         "Round %d: multi-objective tracked (frontier=%d, "
                         "on_frontier=%s, scores=%s)",
@@ -327,15 +313,11 @@ class TrainingLoop:
                     context.history = context.history[-context.max_history_size :]
 
                 # Track best config / score.
-                val_mean = (
-                    context.val_scores.mean_score if context.val_scores else 0.0
-                )
+                val_mean = context.val_scores.mean_score if context.val_scores else 0.0
                 if val_mean > context.best_val_score:
                     context.best_val_score = val_mean
                     context.best_config = dict(context.current_config)
-                    logger.info(
-                        "Round %d: new best val score %.3f", round_num, val_mean
-                    )
+                    logger.info("Round %d: new best val score %.3f", round_num, val_mean)
                 else:
                     logger.info(
                         "Round %d: val score %.3f did not beat best %.3f",
@@ -353,11 +335,9 @@ class TrainingLoop:
 
                 # Check scheduler convergence.
                 if self._pareto_tracker is not None:
-                    converged, conv_reason = (
-                        self._scheduler.should_stop_multi_objective(
-                            context,
-                            self._pareto_tracker,
-                        )
+                    converged, conv_reason = self._scheduler.should_stop_multi_objective(
+                        context,
+                        self._pareto_tracker,
                     )
                 else:
                     converged, conv_reason = self._scheduler.should_stop(context)
@@ -415,9 +395,7 @@ class TrainingLoop:
         # If no judges were supplied, fall back to the default sequential
         # evaluation stage but still use parallel execution.
         if judges:
-            eval_stage: Stage = ParallelEvaluationStage(
-                judges=judges, strategy=strategy
-            )
+            eval_stage: Stage = ParallelEvaluationStage(judges=judges, strategy=strategy)
         else:
             eval_stage = EvaluationStage()
 
@@ -442,9 +420,7 @@ class TrainingLoop:
             try:
                 verdict = guardrail.check(context.history)
                 if verdict.should_stop:
-                    return True, (
-                        f"Guardrail '{verdict.guardrail_name}': {verdict.reason}"
-                    )
+                    return True, (f"Guardrail '{verdict.guardrail_name}': {verdict.reason}")
                 if not verdict.passed:
                     logger.warning(
                         "Guardrail '%s' flagged (non-fatal): %s",

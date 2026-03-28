@@ -100,13 +100,9 @@ def format_diff_text(entries: list[DiffEntry]) -> str:
     lines: list[str] = []
     for entry in entries:
         if entry.change_type == "added":
-            lines.append(
-                f"{_GREEN}+ {entry.path}: {entry.new_value!r}{_RESET}"
-            )
+            lines.append(f"{_GREEN}+ {entry.path}: {entry.new_value!r}{_RESET}")
         elif entry.change_type == "removed":
-            lines.append(
-                f"{_RED}- {entry.path}: {entry.old_value!r}{_RESET}"
-            )
+            lines.append(f"{_RED}- {entry.path}: {entry.old_value!r}{_RESET}")
         elif entry.change_type == "modified":
             lines.append(
                 f"{_YELLOW}~ {entry.path}: {entry.old_value!r} -> {entry.new_value!r}{_RESET}"
@@ -142,10 +138,7 @@ def format_diff_html(entries: list[DiffEntry]) -> str:
         elif entry.change_type == "removed":
             text = f"{prefix} {entry.path}: {entry.old_value!r}"
         else:
-            text = (
-                f"{prefix} {entry.path}: {entry.old_value!r} &rarr; "
-                f"{entry.new_value!r}"
-            )
+            text = f"{prefix} {entry.path}: {entry.old_value!r} &rarr; {entry.new_value!r}"
         parts.append(f'  <div class="diff-entry" style="{style}">{text}</div>')
     parts.append("</div>")
     return "\n".join(parts)

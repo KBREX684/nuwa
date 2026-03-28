@@ -140,14 +140,10 @@ def parse_json_response(text: str) -> dict[str, Any] | list[Any]:
                 "JSON parse failed. Original text (first 500 chars): %s",
                 text[:500],
             )
-            raise LLMError(
-                f"Failed to parse JSON from LLM response: {exc}"
-            ) from exc
+            raise LLMError(f"Failed to parse JSON from LLM response: {exc}") from exc
 
     if not isinstance(result, (dict, list)):
-        raise LLMError(
-            f"Expected a JSON object or array, got {type(result).__name__}."
-        )
+        raise LLMError(f"Expected a JSON object or array, got {type(result).__name__}.")
     return result
 
 
@@ -184,6 +180,4 @@ def parse_structured(text: str, schema: type[T]) -> T:
         return schema.model_validate(data)
     except PydanticValidationError as exc:
         logger.debug("Pydantic validation errors: %s", exc.errors())
-        raise LLMError(
-            f"LLM response failed {schema.__name__} validation: {exc}"
-        ) from exc
+        raise LLMError(f"LLM response failed {schema.__name__} validation: {exc}") from exc

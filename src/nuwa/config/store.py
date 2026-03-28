@@ -55,9 +55,7 @@ class ConfigStore:
                 data = yaml.safe_load(text)
 
             if not isinstance(data, dict):
-                raise ConfigError(
-                    f"Expected a mapping in {path}, got {type(data).__name__}"
-                )
+                raise ConfigError(f"Expected a mapping in {path}, got {type(data).__name__}")
 
             config = NuwaConfig.model_validate(data)
             logger.info("Loaded configuration from %s", path)

@@ -54,8 +54,7 @@ class ParallelExecutor:
     ) -> None:
         if max_concurrency < 1 or max_concurrency > _MAX_CONCURRENCY_LIMIT:
             raise ValueError(
-                f"max_concurrency must be in [1, {_MAX_CONCURRENCY_LIMIT}], "
-                f"got {max_concurrency}"
+                f"max_concurrency must be in [1, {_MAX_CONCURRENCY_LIMIT}], got {max_concurrency}"
             )
         self._max_concurrency = max_concurrency
         self._timeout = timeout_per_sample
@@ -118,8 +117,7 @@ class ParallelExecutor:
                 return sample, response
 
         logger.info(
-            "ParallelExecutor: launching %d samples (concurrency=%d, "
-            "timeout=%.1fs, retries=%d)",
+            "ParallelExecutor: launching %d samples (concurrency=%d, timeout=%.1fs, retries=%d)",
             total,
             self._max_concurrency,
             self._timeout,
@@ -156,9 +154,7 @@ class ParallelExecutor:
                 return response
             except TimeoutError:
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
-                last_exc = TimeoutError(
-                    f"Timed out after {elapsed_ms:.0f}ms"
-                )
+                last_exc = TimeoutError(f"Timed out after {elapsed_ms:.0f}ms")
                 logger.warning(
                     "Sample %s attempt %d/%d timed out after %.0fms",
                     sample.id,

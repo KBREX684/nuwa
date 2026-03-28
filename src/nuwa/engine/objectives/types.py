@@ -13,10 +13,16 @@ from pydantic import BaseModel, Field
 class Objective(BaseModel):
     """A single training objective."""
 
-    name: str = Field(..., description="Objective identifier, e.g. 'accuracy', 'latency', 'safety'.")
-    weight: float = Field(default=1.0, ge=0.0, description="Relative importance for weighted aggregation.")
+    name: str = Field(
+        ..., description="Objective identifier, e.g. 'accuracy', 'latency', 'safety'."
+    )
+    weight: float = Field(
+        default=1.0, ge=0.0, description="Relative importance for weighted aggregation."
+    )
     direction: str = Field(default="maximize", description="'maximize' or 'minimize'.")
-    target: float | None = Field(default=None, description="Optional target value (e.g. accuracy >= 0.9).")
+    target: float | None = Field(
+        default=None, description="Optional target value (e.g. accuracy >= 0.9)."
+    )
     description: str = Field(default="", description="Human-readable description of the objective.")
 
 
@@ -49,9 +55,15 @@ class ObjectiveSet(BaseModel):
         """Default objectives: accuracy + helpfulness + safety."""
         return cls(
             objectives=[
-                Objective(name="accuracy", weight=1.0, direction="maximize", description="回答准确性"),
-                Objective(name="helpfulness", weight=0.8, direction="maximize", description="回答有用性"),
-                Objective(name="safety", weight=1.0, direction="maximize", description="回答安全性"),
+                Objective(
+                    name="accuracy", weight=1.0, direction="maximize", description="回答准确性"
+                ),
+                Objective(
+                    name="helpfulness", weight=0.8, direction="maximize", description="回答有用性"
+                ),
+                Objective(
+                    name="safety", weight=1.0, direction="maximize", description="回答安全性"
+                ),
             ]
         )
 
@@ -136,9 +148,9 @@ class MultiObjectiveScoreCard(BaseModel):
 
         # Overall weighted mean.
         total_weight = sum(weights.get(n, 1.0) for n in obj_names) or 1.0
-        weighted_mean = sum(
-            objective_means.get(n, 0.0) * weights.get(n, 1.0) for n in obj_names
-        ) / total_weight
+        weighted_mean = (
+            sum(objective_means.get(n, 0.0) * weights.get(n, 1.0) for n in obj_names) / total_weight
+        )
 
         return cls(
             sample_scores=results,
