@@ -141,8 +141,17 @@ class CliAdapter:
             )
 
         except TimeoutError:
-            proc.kill()
-            await proc.wait()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass  # Already exited.
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except TimeoutError:
+                logger.warning(
+                    "Process %d did not terminate after kill; it may become a zombie.",
+                    proc.pid,
+                )
             raise ConnectorError(
                 f"CLI command timed out after {self._timeout}s: {' '.join(cmd_parts)}"
             )

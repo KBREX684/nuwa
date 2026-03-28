@@ -11,10 +11,17 @@ from __future__ import annotations
 import json
 import logging
 import math
-from typing import Any
+from typing import Any, Literal, cast
 
 from jinja2 import Template
 
+from nuwa.core.defaults import (
+    FAILURE_SCORE_THRESHOLD,
+    MAX_FAILURES_FOR_PROMPT,
+    MAX_OUTPUT_CHARS,
+    MAX_PASSES_FOR_PROMPT,
+    TEMPERATURE_REFLECTION,
+)
 from nuwa.core.exceptions import LLMError
 from nuwa.core.types import LoopContext, Reflection
 from nuwa.llm.prompts import FAILURE_REFLECTION
@@ -24,12 +31,12 @@ logger = logging.getLogger(__name__)
 
 _REFLECTION_TEMPLATE = Template(FAILURE_REFLECTION)
 
-_FAILURE_SCORE_THRESHOLD = 0.7
+_FAILURE_SCORE_THRESHOLD = FAILURE_SCORE_THRESHOLD
 
 # Context-window discipline constants
-_MAX_FAILURES_FOR_PROMPT = 10
-_MAX_PASSES_FOR_PROMPT = 3
-_MAX_OUTPUT_CHARS = 500
+_MAX_FAILURES_FOR_PROMPT = MAX_FAILURES_FOR_PROMPT
+_MAX_PASSES_FOR_PROMPT = MAX_PASSES_FOR_PROMPT
+_MAX_OUTPUT_CHARS = MAX_OUTPUT_CHARS
 
 
 class ReflectionStage:
@@ -95,7 +102,7 @@ class ReflectionStage:
             else:
                 buckets["0.75-1.0"] += 1
 
-        std_dev = math.sqrt(sum((s - mean_score) ** 2 for s in all_scores) / len(all_scores))
+        std_dev = math.sqrt(sum((s - mean_score) ** 2 for s in all_scores) / len(all_scores)) if len(all_scores) > 1 else 0.0
 
         summary_stats = (
             f"=== Summary Statistics ===\n"
@@ -159,7 +166,7 @@ class ReflectionStage:
         )
 
         try:
-            raw = await backend.complete(messages, temperature=0.3)
+            raw = await backend.complete(messages, temperature=TEMPERATURE_REFLECTION)
             data = parse_json_response(raw)
             if not isinstance(data, dict):
                 raise LLMError("Reflection response is not a JSON object.")
@@ -199,10 +206,10 @@ class ReflectionStage:
                 diagnosis=str(diagnosis),
                 failure_patterns=failure_patterns,
                 proposed_changes=proposed_changes,
-                priority=priority,  # type: ignore[arg-type]
+                priority=cast(Literal["low", "medium", "high", "critical"], priority),
             )
 
-        except (LLMError, KeyError, TypeError) as exc:
+        except (LLMError, KeyError, TypeError, ValueError) as exc:
             logger.error("Reflection LLM call failed: %s", exc)
             context.reflection = Reflection(
                 round_num=context.round_num,

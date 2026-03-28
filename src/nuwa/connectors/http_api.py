@@ -78,6 +78,33 @@ class HttpApiAdapter:
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._config_endpoint = config_endpoint
         self._cached_config: dict[str, Any] = {}
+        # Lazily-created, long-lived session shared across all requests.
+        self._session: aiohttp.ClientSession | None = None
+
+    # ------------------------------------------------------------------
+    # Lifecycle helpers
+    # ------------------------------------------------------------------
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Return (and lazily create) the shared aiohttp session."""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                headers=self._headers,
+                timeout=self._timeout,
+            )
+        return self._session
+
+    async def close(self) -> None:
+        """Close the shared HTTP session.  Call when done with the adapter."""
+        if self._session is not None and not self._session.closed:
+            await self._session.close()
+            self._session = None
+
+    async def __aenter__(self) -> HttpApiAdapter:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.close()
 
     # ------------------------------------------------------------------
     # TargetAgent protocol
@@ -99,39 +126,36 @@ class HttpApiAdapter:
             payload["config"] = config
 
         try:
-            async with aiohttp.ClientSession(
-                headers=self._headers,
-                timeout=self._timeout,
-            ) as session:
-                with _LatencyTimer() as timer:
-                    async with session.request(
-                        self._method,
-                        self._url,
-                        json=payload,
-                    ) as resp:
-                        body = await resp.json(content_type=None)
+            session = await self._get_session()
+            with _LatencyTimer() as timer:
+                async with session.request(
+                    self._method,
+                    self._url,
+                    json=payload,
+                ) as resp:
+                    body = await resp.json(content_type=None)
 
-                if resp.status >= 400:
-                    error_detail = body.get("error", body.get("detail", resp.reason))
-                    logger.warning(
-                        "Agent returned HTTP %s: %s", resp.status, error_detail,
-                    )
-                    return AgentResponse(
-                        output_text="",
-                        latency_ms=timer.elapsed_ms,
-                        raw_metadata={
-                            "http_status": resp.status,
-                            "error": str(error_detail),
-                            **(body if isinstance(body, dict) else {"raw": body}),
-                        },
-                    )
-
-                output_text = self._extract_output(body)
-                return AgentResponse(
-                    output_text=output_text,
-                    latency_ms=timer.elapsed_ms,
-                    raw_metadata=body if isinstance(body, dict) else {"raw": body},
+            if resp.status >= 400:
+                error_detail = body.get("error", body.get("detail", resp.reason))
+                logger.warning(
+                    "Agent returned HTTP %s: %s", resp.status, error_detail,
                 )
+                return AgentResponse(
+                    output_text="",
+                    latency_ms=timer.elapsed_ms,
+                    raw_metadata={
+                        "http_status": resp.status,
+                        "error": str(error_detail),
+                        **(body if isinstance(body, dict) else {"raw": body}),
+                    },
+                )
+
+            output_text = self._extract_output(body)
+            return AgentResponse(
+                output_text=output_text,
+                latency_ms=timer.elapsed_ms,
+                raw_metadata=body if isinstance(body, dict) else {"raw": body},
+            )
 
         except aiohttp.ClientError as exc:
             logger.error("HTTP request to %s failed: %s", self._url, exc)
@@ -171,14 +195,11 @@ class HttpApiAdapter:
         if not self._config_endpoint:
             return {}
         try:
-            async with aiohttp.ClientSession(
-                headers=self._headers,
-                timeout=self._timeout,
-            ) as session:
-                async with session.get(self._config_endpoint) as resp:
-                    body = await resp.json(content_type=None)
-                    self._cached_config = body if isinstance(body, dict) else {}
-                    return dict(self._cached_config)
+            session = await self._get_session()
+            async with session.get(self._config_endpoint) as resp:
+                body = await resp.json(content_type=None)
+                self._cached_config = body if isinstance(body, dict) else {}
+                return dict(self._cached_config)
         except Exception as exc:
             logger.error("Failed to fetch config from %s: %s", self._config_endpoint, exc)
             raise ConnectorError(f"Config fetch failed: {exc}") from exc
@@ -189,16 +210,13 @@ class HttpApiAdapter:
         if not self._config_endpoint:
             return
         try:
-            async with aiohttp.ClientSession(
-                headers=self._headers,
-                timeout=self._timeout,
-            ) as session:
-                async with session.put(self._config_endpoint, json=config) as resp:
-                    if resp.status >= 400:
-                        body = await resp.text()
-                        logger.warning(
-                            "Config push returned HTTP %s: %s", resp.status, body,
-                        )
+            session = await self._get_session()
+            async with session.put(self._config_endpoint, json=config) as resp:
+                if resp.status >= 400:
+                    body = await resp.text()
+                    logger.warning(
+                        "Config push returned HTTP %s: %s", resp.status, body,
+                    )
         except Exception as exc:
             logger.error("Failed to push config to %s: %s", self._config_endpoint, exc)
             raise ConnectorError(f"Config push failed: {exc}") from exc

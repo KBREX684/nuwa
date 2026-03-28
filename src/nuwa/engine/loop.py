@@ -247,7 +247,10 @@ class TrainingLoop:
                     on_frontier,
                     {k: round(v, 4) for k, v in objective_scores.items()},
                 )
+            # Trim history to prevent unbounded memory growth in long training runs.
             context.history.append(round_result)
+            if len(context.history) > context.max_history_size:
+                context.history = context.history[-context.max_history_size:]
 
             # Track best config / score.
             val_mean = (

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any
+from typing import Any, Literal, cast
 
 from jinja2 import Template
 
+from nuwa.core.defaults import TEMPERATURE_DATASET_GEN
 from nuwa.core.exceptions import LLMError
 from nuwa.core.types import EvalSample, LoopContext
 from nuwa.llm.prompts import DATASET_GENERATION
@@ -65,7 +66,7 @@ class DatasetGenStage:
             config.samples_per_round,
         )
 
-        raw_response = await backend.complete(messages, temperature=0.9)
+        raw_response = await backend.complete(messages, temperature=TEMPERATURE_DATASET_GEN)
         raw_data = parse_json_response(raw_response)
 
         if not isinstance(raw_data, list):
@@ -84,7 +85,7 @@ class DatasetGenStage:
                     EvalSample(
                         input_text=str(item["input_text"]),
                         expected_behavior=str(item["expected_behavior"]),
-                        difficulty=difficulty,  # type: ignore[arg-type]
+                        difficulty=cast(Literal["easy", "medium", "hard"], difficulty),
                         tags=list(item.get("tags", [])),
                     )
                 )
@@ -94,12 +95,20 @@ class DatasetGenStage:
                 )
 
         if not samples:
-            raise LLMError("LLM produced zero valid eval samples.")
+            raise LLMError("LLM produced zero valid samples.")
 
         # --- split into train / val ----------------------------------------
         split_idx = max(1, math.floor(len(samples) * config.train_val_split))
         context.train_set = samples[:split_idx]
         context.val_set = samples[split_idx:] if split_idx < len(samples) else []
+
+        if not context.val_set:
+            logger.warning(
+                "Round %d: val_set is empty after split (split_idx=%d, total=%d). "
+                "Using last sample as validation.",
+                context.round_num, split_idx, len(samples),
+            )
+            context.val_set = [samples[-1]] if samples else []
 
         logger.info(
             "Round %d: %d train / %d val samples ready",

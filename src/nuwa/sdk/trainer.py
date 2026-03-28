@@ -119,12 +119,12 @@ class NuwaTrainer:
     def __init__(
         self,
         agent: Callable[..., Any] | TargetAgent,
-        direction: str,
+        training_direction: str = "",
         *,
         model: str = "openai/gpt-4o",
-        api_key: str | None = None,
-        base_url: str | None = None,
-        max_rounds: int = 5,
+        llm_api_key: str | None = None,
+        llm_base_url: str | None = None,
+        max_rounds: int = 10,
         samples_per_round: int = 20,
         train_val_split: float = 0.7,
         overfitting_threshold: float = 0.15,
@@ -134,9 +134,26 @@ class NuwaTrainer:
         project_dir: str | Path = ".nuwa",
         on_round_end: Callable[..., Any] | None = None,
         verbose: bool = True,
+        # Backward-compatible aliases (preferred names above take precedence)
+        direction: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ) -> None:
+        # Resolve backward-compatible aliases
+        if direction is not None and not training_direction:
+            training_direction = direction
+        if not training_direction:
+            raise ValueError(
+                "training_direction is required. "
+                "Pass training_direction='...' or direction='...'."
+            )
+        if api_key is not None and llm_api_key is None:
+            llm_api_key = api_key
+        if base_url is not None and llm_base_url is None:
+            llm_base_url = base_url
+
         self._raw_agent = agent
-        self._direction = direction
+        self._direction = training_direction
         self._sandbox = sandbox
         self._verbose = verbose
         self._project_dir = Path(project_dir)
@@ -161,13 +178,13 @@ class NuwaTrainer:
         # Build the LLM backend.
         self._backend = LiteLLMBackend(
             model=model,
-            api_key=api_key,
-            base_url=base_url,
+            api_key=llm_api_key,
+            base_url=llm_base_url,
         )
 
         # Build the training config.
         self._training_config = TrainingConfig(
-            training_direction=direction,
+            training_direction=training_direction,
             max_rounds=max_rounds,
             samples_per_round=samples_per_round,
             train_val_split=train_val_split,
@@ -308,3 +325,19 @@ class NuwaTrainer:
             f"NuwaTrainer(direction={self._direction!r}, "
             f"max_rounds={self._training_config.max_rounds}, status={status!r})"
         )
+
+    # ------------------------------------------------------------------
+    # Async context manager support
+    # ------------------------------------------------------------------
+
+    async def __aenter__(self) -> NuwaTrainer:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        """Clean up resources (e.g. sandbox session) when used as a context manager."""
+        if self._sandbox_manager is not None:
+            try:
+                self._sandbox_manager.discard()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to clean up sandbox on exit: %s", exc)
+            logger.debug("NuwaTrainer context exited, sandbox cleaned up.")

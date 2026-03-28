@@ -168,7 +168,7 @@ class ScoreCard(BaseModel):
         ),
     )
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def mean_score(self) -> float:
         """Arithmetic mean of all individual scores (0.0 when empty)."""
@@ -176,7 +176,7 @@ class ScoreCard(BaseModel):
             return 0.0
         return sum(r.score for r in self.results) / len(self.results)
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def pass_rate(self) -> float:
         """Fraction of results whose score meets or exceeds the pass threshold."""
@@ -376,6 +376,7 @@ class LoopContext(BaseModel):
 
     # -- cross-round state -------------------------------------------------
     history: list[RoundResult] = Field(default_factory=list)
+    max_history_size: int = Field(default=100, ge=1, help="Cap history size to prevent unbounded memory growth in long training runs.")
     current_config: dict[str, Any] = Field(default_factory=dict)
     best_config: dict[str, Any] = Field(default_factory=dict)
     best_val_score: float = Field(default=0.0, ge=0.0, le=1.0)
