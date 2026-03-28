@@ -14,6 +14,8 @@ from nuwa.core.types import (
     TrainingConfig,
     TrainingResult,
 )
+from nuwa.engine.objectives.pareto import ParetoTracker
+from nuwa.engine.objectives.types import Objective, ObjectiveSet
 from nuwa.engine.parallel.evaluator import EnsembleStrategy, JudgeConfig
 from nuwa.engine.parallel.stage import (
     ParallelEvaluationStage,
@@ -52,6 +54,9 @@ class TrainingLoop:
         self._callbacks = callbacks or []
         self._sandbox = sandbox
         self._scheduler = TrainingScheduler(config)
+        self._objective_set: ObjectiveSet | None = None
+        self._pareto_tracker: ParetoTracker | None = None
+        self._init_multi_objective(config)
 
         # Initialise the pipeline stages.
         # When *parallel_config* is provided, swap the execution, evaluation,
@@ -218,6 +223,21 @@ class TrainingLoop:
                 mutation=context.proposed_mutation,
                 applied=context.proposed_mutation is not None,
             )
+            if self._pareto_tracker is not None and self._objective_set is not None:
+                objective_scores = self._build_objective_scores(context)
+                on_frontier = self._pareto_tracker.add(
+                    round_num=round_num,
+                    config=context.current_config,
+                    scores=objective_scores,
+                )
+                round_result.pareto_frontier_size = len(self._pareto_tracker.frontier)
+                logger.info(
+                    "Round %d: multi-objective tracked (frontier=%d, on_frontier=%s, scores=%s)",
+                    round_num,
+                    round_result.pareto_frontier_size,
+                    on_frontier,
+                    {k: round(v, 4) for k, v in objective_scores.items()},
+                )
             context.history.append(round_result)
 
             # Track best config / score.
@@ -247,7 +267,13 @@ class TrainingLoop:
                 break
 
             # Check scheduler convergence.
-            converged, conv_reason = self._scheduler.should_stop(context)
+            if self._pareto_tracker is not None:
+                converged, conv_reason = self._scheduler.should_stop_multi_objective(
+                    context,
+                    self._pareto_tracker,
+                )
+            else:
+                converged, conv_reason = self._scheduler.should_stop(context)
             if converged:
                 stop_reason = conv_reason
                 logger.info("Scheduler stop: %s", conv_reason)
@@ -333,6 +359,61 @@ class TrainingLoop:
                 logger.exception("Guardrail '%s' raised an exception", guardrail.name)
         return False, ""
 
+    def _init_multi_objective(self, config: TrainingConfig) -> None:
+        """Initialise multi-objective tracking from training config."""
+        raw_objectives = config.objectives or []
+        if not raw_objectives:
+            return
+
+        objectives: list[Objective] = []
+        for idx, item in enumerate(raw_objectives):
+            if not isinstance(item, dict):
+                logger.warning(
+                    "Ignoring invalid objective at index %d (expected dict, got %s)",
+                    idx,
+                    type(item).__name__,
+                )
+                continue
+            try:
+                objectives.append(Objective.model_validate(item))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Ignoring invalid objective at index %d: %s",
+                    idx,
+                    exc,
+                )
+
+        if not objectives:
+            logger.warning("Multi-objective mode requested but no valid objectives were parsed.")
+            return
+
+        self._objective_set = ObjectiveSet(objectives=objectives)
+        self._pareto_tracker = ParetoTracker(self._objective_set)
+        logger.info(
+            "Multi-objective mode enabled with objectives=%s",
+            [obj.name for obj in objectives],
+        )
+
+    def _build_objective_scores(self, context: LoopContext) -> dict[str, float]:
+        """Build per-objective scores for Pareto tracking in the current round."""
+        if self._objective_set is None:
+            return {}
+
+        val_mean = context.val_scores.mean_score if context.val_scores else 0.0
+        from_card = context.val_scores.objective_scores if context.val_scores else None
+
+        scores: dict[str, float] = {}
+        for obj in self._objective_set.objectives:
+            raw = val_mean
+            if from_card and obj.name in from_card:
+                raw = from_card[obj.name]
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                value = val_mean
+            scores[obj.name] = max(0.0, min(1.0, value))
+        return scores
+
     def _finalize(
         self,
         context: LoopContext,
@@ -349,12 +430,25 @@ class TrainingLoop:
                 best_score = vs
                 best_round = rr.round_num
 
+        frontier_payload: list[dict[str, Any]] | None = None
+        if self._pareto_tracker is not None:
+            frontier_payload = [
+                {
+                    "round_num": p.round_num,
+                    "config": p.config,
+                    "scores": p.scores,
+                    "weighted_score": p.weighted_score,
+                }
+                for p in self._pareto_tracker.frontier
+            ]
+
         return TrainingResult(
             rounds=context.history,
             best_round=best_round,
             best_val_score=best_score,
             final_config=context.best_config,
             stop_reason=stop_reason,
+            pareto_frontier=frontier_payload,
             total_duration_s=round(elapsed_s, 2),
             sandbox_session_id=sandbox_session_id,
         )

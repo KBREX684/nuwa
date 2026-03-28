@@ -43,7 +43,10 @@ class ValidationStage:
         # --- Execute agent on val_set ------------------------------------
         sem = asyncio.Semaphore(_MAX_CONCURRENCY)
 
-        async def _run_and_score(sample_input: str, expected: str) -> tuple[AgentResponse, float, str]:
+        async def _run_and_score(
+            sample_input: str,
+            expected: str,
+        ) -> tuple[AgentResponse, float, str, dict[str, float] | None]:
             async with sem:
                 start = time.perf_counter()
                 try:
@@ -67,10 +70,10 @@ class ValidationStage:
                     )
 
                 # Score the response.
-                score, reasoning = await self._score_one(
+                score, reasoning, axis_scores = await self._score_one(
                     backend, sample_input, expected, response.output_text
                 )
-                return response, score, reasoning
+                return response, score, reasoning, axis_scores
 
         logger.info(
             "Round %d: validating on %d held-out samples",
@@ -85,7 +88,8 @@ class ValidationStage:
         results = await asyncio.gather(*tasks)
 
         scored: list[ScoredResult] = []
-        for sample, (response, score, reasoning) in zip(val_samples, results):
+        axis_rows: list[dict[str, float]] = []
+        for sample, (response, score, reasoning, axis_scores) in zip(val_samples, results):
             scored.append(
                 ScoredResult(
                     sample=sample,
@@ -94,6 +98,19 @@ class ValidationStage:
                     reasoning=reasoning,
                 )
             )
+            if axis_scores:
+                axis_rows.append(axis_scores)
+
+        objective_scores: dict[str, float] | None = None
+        if axis_rows:
+            keys: set[str] = set()
+            for row in axis_rows:
+                keys.update(row.keys())
+            objective_scores = {}
+            for key in sorted(keys):
+                vals = [row[key] for row in axis_rows if key in row]
+                if vals:
+                    objective_scores[key] = sum(vals) / len(vals)
 
         failures = [s for s in scored if s.score < _PASS_THRESHOLD]
         failure_analysis = ""
@@ -107,7 +124,11 @@ class ValidationStage:
                 + "\n".join(lines)
             )
 
-        context.val_scores = ScoreCard(results=scored, failure_analysis=failure_analysis)
+        context.val_scores = ScoreCard(
+            results=scored,
+            failure_analysis=failure_analysis,
+            objective_scores=objective_scores,
+        )
 
         logger.info(
             "Round %d: val mean_score=%.3f  pass_rate=%.2f",
@@ -125,8 +146,12 @@ class ValidationStage:
         input_text: str,
         expected_behavior: str,
         actual_output: str,
-    ) -> tuple[float, str]:
-        """Score a single validation triple. Returns (score, reasoning)."""
+    ) -> tuple[float, str, dict[str, float] | None]:
+        """Score a single validation triple.
+
+        Returns:
+            (score, reasoning, axis_scores)
+        """
         prompt = _SCORING_TEMPLATE.render(
             input_text=input_text,
             expected_behavior=expected_behavior,
@@ -145,7 +170,18 @@ class ValidationStage:
             score = max(0.0, min(1.0, score))
             reasoning_en = data.get("reasoning_en", "")  # type: ignore[union-attr]
             reasoning_zh = data.get("reasoning_zh", "")  # type: ignore[union-attr]
-            return score, str(reasoning_en or reasoning_zh or "(no reasoning)")
+            axis_raw = data.get("axis_scores", {})  # type: ignore[union-attr]
+            axis_scores: dict[str, float] | None = None
+            if isinstance(axis_raw, dict):
+                axis_scores = {}
+                for k, v in axis_raw.items():
+                    try:
+                        axis_scores[str(k)] = max(0.0, min(1.0, float(v)))
+                    except (TypeError, ValueError):
+                        continue
+                if not axis_scores:
+                    axis_scores = None
+            return score, str(reasoning_en or reasoning_zh or "(no reasoning)"), axis_scores
         except (LLMError, KeyError, TypeError, ValueError) as exc:
             logger.warning("Validation scoring failed: %s", exc)
-            return 0.0, f"Scoring error: {exc}"
+            return 0.0, f"Scoring error: {exc}", None

@@ -78,9 +78,11 @@ class EvaluationStage:
         llm_w = self._llm_weight
         imm_w = self._immutable_weight
 
-        async def _score_with_sem(sr: ScoredResult) -> ScoredResult:
+        async def _score_with_sem(
+            sr: ScoredResult,
+        ) -> tuple[ScoredResult, dict[str, float] | None]:
             async with sem:
-                llm_score, reasoning = await self._score_one(
+                llm_score, reasoning, axis_scores = await self._score_one(
                     backend,
                     sr.sample.input_text,
                     sr.sample.expected_behavior,
@@ -109,9 +111,24 @@ class EvaluationStage:
                     response=sr.response,
                     score=score,
                     reasoning=full_reasoning,
-                )
+                ), axis_scores
 
-        scored = list(await asyncio.gather(*(_score_with_sem(sr) for sr in context.train_results)))
+        scored_with_axes = list(
+            await asyncio.gather(*(_score_with_sem(sr) for sr in context.train_results))
+        )
+        scored = [item[0] for item in scored_with_axes]
+        axis_rows = [item[1] for item in scored_with_axes if item[1]]
+
+        objective_scores: dict[str, float] | None = None
+        if axis_rows:
+            keys: set[str] = set()
+            for row in axis_rows:
+                keys.update(row.keys())
+            objective_scores = {}
+            for key in sorted(keys):
+                vals = [row[key] for row in axis_rows if key in row]
+                if vals:
+                    objective_scores[key] = sum(vals) / len(vals)
 
         # Build failure analysis summary for items below threshold.
         failures = [s for s in scored if s.score < _PASS_THRESHOLD]
@@ -128,7 +145,11 @@ class EvaluationStage:
                 f"{_PASS_THRESHOLD}:\n" + "\n".join(lines)
             )
 
-        card = ScoreCard(results=scored, failure_analysis=failure_analysis)
+        card = ScoreCard(
+            results=scored,
+            failure_analysis=failure_analysis,
+            objective_scores=objective_scores,
+        )
         context.train_scores = card
         context.train_results = scored  # update with real scores
 
@@ -150,8 +171,12 @@ class EvaluationStage:
         input_text: str,
         expected_behavior: str,
         actual_output: str,
-    ) -> tuple[float, str]:
-        """Score a single evaluation triple. Returns (score, reasoning)."""
+    ) -> tuple[float, str, dict[str, float] | None]:
+        """Score a single evaluation triple.
+
+        Returns:
+            (score, reasoning, axis_scores)
+        """
         prompt = _SCORING_TEMPLATE.render(
             input_text=input_text,
             expected_behavior=expected_behavior,
@@ -171,7 +196,18 @@ class EvaluationStage:
             reasoning_en = data.get("reasoning_en", "")  # type: ignore[union-attr]
             reasoning_zh = data.get("reasoning_zh", "")  # type: ignore[union-attr]
             reasoning = reasoning_en or reasoning_zh or "(no reasoning provided)"
-            return score, str(reasoning)
+            axis_raw = data.get("axis_scores", {})  # type: ignore[union-attr]
+            axis_scores: dict[str, float] | None = None
+            if isinstance(axis_raw, dict):
+                axis_scores = {}
+                for k, v in axis_raw.items():
+                    try:
+                        axis_scores[str(k)] = max(0.0, min(1.0, float(v)))
+                    except (TypeError, ValueError):
+                        continue
+                if not axis_scores:
+                    axis_scores = None
+            return score, str(reasoning), axis_scores
         except (LLMError, KeyError, TypeError, ValueError) as exc:
             logger.warning("Scoring failed for a sample: %s", exc)
-            return 0.0, f"Scoring error: {exc}"
+            return 0.0, f"Scoring error: {exc}", None

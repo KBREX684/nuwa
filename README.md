@@ -186,33 +186,26 @@ Nuwa 默认在沙箱中运行训练，确保你的智能体安全：
 
 ```yaml
 # config.yaml
-project:
-  name: my-customer-support-agent
-  description: "优化客服智能体的回答质量"
-  max_rounds: 10
+llm_model: openai/gpt-4o
+llm_api_key: ${OPENAI_API_KEY}
+llm_temperature: 0.7
 
-agent:
-  connector: http            # http | cli | python
-  endpoint: "http://localhost:8000/chat"
+connector_type: http          # http | cli | function
+connector_params:
+  url: "http://localhost:8000/chat"
+  method: POST
+  input_field: input
+  output_field: output
   timeout: 30
 
-llm:
-  provider: openai           # openai | anthropic | ollama | litellm
-  model: gpt-4o
-  temperature: 0.7
-
-evaluation:
-  metrics:
-    - accuracy
-    - helpfulness
-    - safety
-  passing_threshold: 0.85
-
-guardrails:
-  overfit_detection: true
-  regression_prevention: true
-  consistency_check: true
-  holdout_ratio: 0.2         # 20% 数据用于过拟合检测
+training_direction: "优化客服智能体的回答质量"
+max_rounds: 10
+samples_per_round: 20
+train_val_split: 0.7
+overfitting_threshold: 0.15
+regression_tolerance: 0.05
+consistency_threshold: 0.8
+project_dir: .nuwa
 ```
 
 ## 接入你的智能体 / Connecting Your Agent
@@ -222,33 +215,39 @@ Nuwa 通过 **连接器（Connector）** 与你的智能体通信。支持三种
 ### HTTP API
 
 ```yaml
-agent:
-  connector: http
-  endpoint: "http://localhost:8000/chat"
+connector_type: http
+connector_params:
+  url: "http://localhost:8000/chat"
   method: POST
   headers:
     Authorization: "Bearer ${AGENT_API_KEY}"
-  body_template: '{"message": "{{input}}"}'
-  response_path: "$.reply"
+  input_field: input
+  output_field: reply
+  timeout: 30
 ```
 
 ### CLI Subprocess
 
 ```yaml
-agent:
-  connector: cli
-  command: "python my_agent.py --input '{{input}}'"
-  working_dir: ./agent
+connector_type: cli
+connector_params:
+  command: python
+  args:
+    - my_agent.py
+  input_mode: stdin
+  timeout: 60
+  config_file: ./agent/config.yaml
 ```
 
 ### Python Function
 
-```yaml
-agent:
-  connector: python
-  module: my_agent.core
-  function: run
-  # Nuwa will call: my_agent.core.run(input=...)
+```python
+from nuwa.config.schema import NuwaConfig
+
+cfg = NuwaConfig(
+    connector_type="function",
+    connector_params={"func": my_agent_callable},  # 直接传入可调用对象
+)
 ```
 
 ## 工作原理 / How It Works

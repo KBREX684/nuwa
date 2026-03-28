@@ -148,6 +148,30 @@ def _result_to_json(result: TrainingResult) -> dict[str, Any]:
     return json.loads(result.model_dump_json())
 
 
+def _resolve_run_log() -> RunLog:
+    """Resolve the most likely RunLog location with backward compatibility."""
+    cfg: NuwaConfig | None = _state.get("current_config")  # type: ignore[assignment]
+    candidates: list[Path] = []
+
+    if cfg is not None:
+        project_dir = Path(cfg.project_dir)
+        candidates.extend([project_dir, project_dir / "logs"])
+
+    candidates.extend([Path(".nuwa"), Path(".nuwa") / "logs"])
+
+    seen: set[Path] = set()
+    for base in candidates:
+        if base in seen:
+            continue
+        seen.add(base)
+        log = RunLog(base)
+        if log.log_path.exists():
+            return log
+
+    # Default fallback: current project root layout.
+    return RunLog(candidates[0] if candidates else Path(".nuwa"))
+
+
 # ---------------------------------------------------------------------------
 # Endpoint: GET /api/status
 # ---------------------------------------------------------------------------
@@ -495,7 +519,7 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
 async def get_history() -> JSONResponse:
     """Return past training rounds from the RunLog on disk."""
     try:
-        run_log = RunLog(Path(".nuwa") / "logs")
+        run_log = _resolve_run_log()
         history = run_log.load_history()
         return JSONResponse([
             json.loads(rr.model_dump_json()) for rr in history

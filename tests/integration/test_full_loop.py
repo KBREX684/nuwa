@@ -295,6 +295,10 @@ async def test_full_training_loop() -> None:
         consistency_threshold=0.5,
         consistency_runs=3,
         regression_tolerance=0.10,
+        objectives=[
+            {"name": "correctness", "weight": 1.0, "direction": "maximize"},
+            {"name": "completeness", "weight": 1.0, "direction": "maximize"},
+        ],
     )
 
     guardrails = [
@@ -333,12 +337,15 @@ async def test_full_training_loop() -> None:
     assert result.stop_reason, "Expected a non-empty stop_reason"
     assert result.best_round >= 0
     assert result.total_duration_s > 0.0
+    assert result.pareto_frontier is not None
+    assert len(result.pareto_frontier) > 0
 
     # Check that history has round results
     for i, rr in enumerate(result.rounds):
         assert rr.train_scores is not None, f"Round {rr.round_num}: missing train_scores"
         assert rr.train_scores.mean_score > 0.0, f"Round {rr.round_num}: train score is 0"
         assert rr.reflection is not None, f"Round {rr.round_num}: missing reflection"
+        assert rr.pareto_frontier_size >= 1
 
     # Check that the loop completed successfully - config changes may or may not happen
     # depending on whether mutations were proposed and validated
