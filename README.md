@@ -5,7 +5,7 @@
 **AI Agent Trainer — 让智能体自动进化**
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/badge/PyPI-nuwa--trainer-orange?logo=pypi&logoColor=white)](https://pypi.org/project/nuwa-trainer/)
 
 [中文](#什么是女娲) | [English](#what-is-nuwa)
@@ -83,6 +83,8 @@ Inspired by automated research frameworks: let an agent handle the work of tunin
 ```bash
 pip install nuwa-trainer
 ```
+
+> **License note:** BSL 1.1 — free for development and evaluation. [Commercial license](LICENSE) required for production use.
 
 ### 交互模式 / Interactive Mode
 
@@ -311,22 +313,21 @@ nuwa/
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/nuwa.git
+git clone https://github.com/KBREX684/nuwa.git
 cd nuwa
 
 # 创建虚拟环境
 python -m venv .venv
 source .venv/bin/activate
 
-# 安装开发依赖
-pip install -e ".[dev]"
+# 安装开发依赖（含 pre-commit hooks）
+make install-dev
 
 # 运行测试
-pytest
+make test
 
 # 代码检查
-ruff check .
-mypy nuwa/
+make check
 ```
 
 ## 路线图 / Roadmap
@@ -341,7 +342,7 @@ mypy nuwa/
 
 ## 许可证 / License
 
-[MIT License](LICENSE)
+[Business Source License 1.1](LICENSE) — 非生产环境免费使用，2028-01-01 起自动转为 Apache 2.0。商业使用请联系维护者。
 
 ---
 
