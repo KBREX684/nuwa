@@ -31,13 +31,14 @@ _HAS_API_KEY = bool(
     os.environ.get("OPENAI_API_KEY")
     or os.environ.get("ANTHROPIC_API_KEY")
     or os.environ.get("AZURE_API_KEY")
+    or os.environ.get("DEEPSEEK_API_KEY")
 )
 
 _E2E_MODEL = os.environ.get("NUWA_E2E_MODEL", "openai/gpt-4o-mini")
 
 skip_no_key = pytest.mark.skipif(
     not _HAS_API_KEY,
-    reason="No LLM API key set (set OPENAI_API_KEY or ANTHROPIC_API_KEY to run).",
+    reason="No LLM API key set (set OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY to run).",
 )
 
 
@@ -76,13 +77,15 @@ async def test_e2e_full_loop_completes() -> None:
 
     # Should complete successfully.
     assert result is not None
-    assert result.stop_reason in (
-        "max_rounds_reached",
-        "converged",
-        "target_score_reached",
-    )
-    assert result.total_rounds > 0
-    assert result.total_rounds <= 2
+    # Scheduler returns e.g. "max_rounds (2) reached" or "converged: ..."
+    sr = result.stop_reason
+    assert (
+        "max_rounds" in sr
+        or "converged" in sr
+        or "target" in sr
+    ), f"Unexpected stop_reason: {sr}"
+    assert len(result.rounds) > 0
+    assert len(result.rounds) <= 2
 
 
 @skip_no_key
@@ -117,7 +120,7 @@ async def test_e2e_trainer_promote_discard() -> None:
 @skip_no_key
 @pytest.mark.asyncio
 async def test_e2e_trainable_decorator() -> None:
-    """@trainable decorated function should work with train_sync."""
+    """@trainable decorated function should work with train()."""
     import nuwa
 
     @nuwa.trainable(name="EchoBot", config_schema={"system_prompt": str})
@@ -128,7 +131,8 @@ async def test_e2e_trainable_decorator() -> None:
     assert hasattr(my_bot, "nuwa_meta")
     assert my_bot.nuwa_meta.name == "EchoBot"
 
-    result = nuwa.train_sync(
+    # Use async train() since we're inside an existing event loop.
+    result = await nuwa.train(
         my_bot,
         training_direction="提升回复质量",
         model=_E2E_MODEL,
@@ -139,4 +143,4 @@ async def test_e2e_trainable_decorator() -> None:
     )
 
     assert result is not None
-    assert result.total_rounds == 1
+    assert len(result.rounds) == 1
