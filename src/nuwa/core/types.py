@@ -8,11 +8,10 @@ guardrail verdicts, and the mutable loop context -- are defined here.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field
-
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -169,7 +168,7 @@ class ScoreCard(BaseModel):
         ),
     )
 
-    @computed_field  # type: ignore[misc]
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def mean_score(self) -> float:
         """Arithmetic mean of all individual scores (0.0 when empty)."""
@@ -177,7 +176,7 @@ class ScoreCard(BaseModel):
             return 0.0
         return sum(r.score for r in self.results) / len(self.results)
 
-    @computed_field  # type: ignore[misc]
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def pass_rate(self) -> float:
         """Fraction of results whose score meets or exceeds the pass threshold."""
@@ -263,7 +262,7 @@ class RoundResult(BaseModel):
         description="Number of Pareto-optimal points after this round (multi-objective mode).",
     )
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="UTC timestamp when the round completed.",
     )
 

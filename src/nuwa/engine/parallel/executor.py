@@ -11,8 +11,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
+from nuwa.core.protocols import TargetAgent
 from nuwa.core.types import AgentResponse, EvalSample
 
 logger = logging.getLogger(__name__)
@@ -66,10 +68,10 @@ class ParallelExecutor:
 
     async def execute_batch(
         self,
-        target: Any,
+        target: TargetAgent,
         samples: list[EvalSample],
         config: dict[str, Any] | None = None,
-        on_progress: Callable[[int, int], Any] | None = None,
+        on_progress: Callable[[int, int], object] | None = None,
     ) -> list[tuple[EvalSample, AgentResponse]]:
         """Run all *samples* through the target agent in parallel.
 
@@ -131,13 +133,14 @@ class ParallelExecutor:
 
     async def _invoke_with_retry(
         self,
-        target: Any,
+        target: TargetAgent,
         sample: EvalSample,
         config: dict[str, Any] | None,
     ) -> AgentResponse:
         """Invoke the target agent with retry + exponential back-off."""
         delay = self._retry_delay
-        last_exc: BaseException | None = None
+        last_exc: Exception | None = None
+        elapsed_ms = 0.0
 
         for attempt in range(1, self._max_retries + 2):  # +2: first try + retries
             start = time.perf_counter()
@@ -147,9 +150,9 @@ class ParallelExecutor:
                     timeout=self._timeout,
                 )
                 return response
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
-                last_exc = asyncio.TimeoutError(
+                last_exc = TimeoutError(
                     f"Timed out after {elapsed_ms:.0f}ms"
                 )
                 logger.warning(
@@ -177,7 +180,6 @@ class ParallelExecutor:
                 delay *= 2  # exponential back-off
 
         # All attempts exhausted -- return a degraded response.
-        elapsed_ms = (time.perf_counter() - start) * 1000.0  # type: ignore[possibly-undefined]
         error_msg = str(last_exc) if last_exc else "unknown error"
         return AgentResponse(
             output_text=f"[ERROR: {error_msg} after {self._max_retries + 1} attempts]",

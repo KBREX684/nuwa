@@ -83,7 +83,7 @@ class OnboardingPhase:
         console.print("[bold cyan]第一步：选择 LLM 模型[/bold cyan]\n")
         for key, (model, desc) in _LLM_OPTIONS.items():
             console.print(f"  [bold]{key}.[/bold] {desc}")
-        console.print(f"  [bold]5.[/bold] 自定义 (手动输入 provider/model)")
+        console.print("  [bold]5.[/bold] 自定义 (手动输入 provider/model)")
         console.print()
 
         choice = Prompt.ask(

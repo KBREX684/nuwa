@@ -70,7 +70,7 @@ class TrainingScheduler:
     # Budget
     # ------------------------------------------------------------------
 
-    def get_round_budget(self, round_num: int) -> dict:
+    def get_round_budget(self, round_num: int) -> dict[str, int | float]:
         """Return the sample budget for a given round.
 
         Later rounds receive slightly more samples to stress-test the agent

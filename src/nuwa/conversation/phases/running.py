@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
-
-from rich.live import Live
-from rich.table import Table
-from rich.text import Text
+from collections.abc import Callable
+from typing import Any
 
 from nuwa.conversation.renderer import NuwaRenderer
-from nuwa.core.types import LoopContext, RoundResult
+from nuwa.core.types import RoundResult
 
 __all__ = ["RunningPhase"]
 

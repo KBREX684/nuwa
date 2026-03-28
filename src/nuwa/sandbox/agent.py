@@ -5,10 +5,10 @@ from __future__ import annotations
 import copy
 import json
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from nuwa.core.types import AgentResponse
 from nuwa.sandbox.diff import DiffEntry, deep_diff
@@ -90,7 +90,7 @@ class SandboxedAgent:
             ConfigSnapshot(
                 version=0,
                 config=copy.deepcopy(original_config),
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 description="initial snapshot (original config)",
                 round_num=None,
             )
@@ -120,7 +120,8 @@ class SandboxedAgent:
             The :class:`AgentResponse` from the real agent.
         """
         effective_config = {**self._sandbox_config, **(config or {})}
-        return await self._real_agent.invoke(input_text, config=effective_config)
+        response = await self._real_agent.invoke(input_text, config=effective_config)
+        return cast(AgentResponse, response)
 
     def apply_config(self, config: dict[str, Any]) -> None:
         """Apply *config* to the **sandbox only**. Creates a versioned snapshot.
@@ -137,7 +138,7 @@ class SandboxedAgent:
         snapshot = ConfigSnapshot(
             version=version,
             config=copy.deepcopy(config),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             description=f"apply_config (mutation #{version})",
             round_num=None,
         )
@@ -208,6 +209,7 @@ class SandboxedAgent:
                     f"Available: {[s.version for s in self._snapshots]}"
                 )
 
+        assert target is not None
         self._sandbox_config = copy.deepcopy(target.config)
         logger.info(
             "Sandbox %s: rolled back to snapshot v%d",

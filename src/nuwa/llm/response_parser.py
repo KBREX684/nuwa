@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from pydantic import BaseModel, ValidationError as PydanticValidationError
+from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 
 from nuwa.core.exceptions import LLMError
 
@@ -88,7 +89,7 @@ def _extract_json_substring(text: str) -> str:
                 if depth == 0:
                     return text[start : i + 1]
 
-    # Nothing found – return the full text and let the caller handle the error
+    # Nothing found - return the full text and let the caller handle the error
     return text.strip()
 
 
@@ -97,7 +98,7 @@ def _extract_json_substring(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def parse_json_response(text: str) -> dict | list:
+def parse_json_response(text: str) -> dict[str, Any] | list[Any]:
     """Extract and parse JSON from an LLM text response.
 
     Supports:

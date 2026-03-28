@@ -6,7 +6,8 @@ import asyncio
 import inspect
 import logging
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from nuwa.core.exceptions import ConnectorError
 from nuwa.core.types import AgentResponse

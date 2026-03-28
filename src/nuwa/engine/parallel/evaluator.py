@@ -11,9 +11,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import statistics
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
 
 from jinja2 import Template
 
@@ -35,7 +36,7 @@ _JUDGE_CONCURRENCY = 5  # per-judge concurrency for scoring samples
 # ---------------------------------------------------------------------------
 
 
-class EnsembleStrategy(str, Enum):
+class EnsembleStrategy(StrEnum):
     """Strategy used to combine scores from multiple judges."""
 
     MEAN = "mean"

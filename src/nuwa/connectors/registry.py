@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
-from typing import Any
+from typing import Any, cast
 
 from nuwa.core.exceptions import ConfigError
 
@@ -29,7 +29,7 @@ CONNECTOR_MAP: dict[str, str] = {
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _import_class(dotted: str) -> type:
+def _import_class(dotted: str) -> type[Any]:
     """Import a class given a ``module.path:ClassName`` string."""
     module_path, _, class_name = dotted.rpartition(":")
     if not module_path or not class_name:
@@ -43,7 +43,7 @@ def _import_class(dotted: str) -> type:
         raise ConfigError(
             f"Class {class_name!r} not found in module {module_path!r}."
         )
-    return cls
+    return cast(type[Any], cls)
 
 
 # ---------------------------------------------------------------------------

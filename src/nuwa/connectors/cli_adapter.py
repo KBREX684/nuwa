@@ -140,7 +140,7 @@ class CliAdapter:
                 raw_metadata={"returncode": 0, "stderr": stderr_text},
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             raise ConnectorError(

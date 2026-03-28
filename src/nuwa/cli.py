@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from pathlib import Path
 
 import typer
@@ -68,8 +67,8 @@ def train_cmd(
 
     通过对话引导您完成模型选择、目标设定和训练执行。
     """
-    from nuwa.conversation.renderer import NuwaRenderer
     from nuwa.conversation.manager import ConversationManager
+    from nuwa.conversation.renderer import NuwaRenderer
 
     renderer = NuwaRenderer()
 
@@ -92,15 +91,15 @@ def train_cmd(
         renderer.success(f"配置已保存到 {project_dir / 'config.yaml'}")
 
         # Run the training pipeline
-        from nuwa.llm.backend import LiteLLMBackend
+        from nuwa.conversation.phases.approval import ApprovalPhase
+        from nuwa.conversation.phases.running import RunningPhase
         from nuwa.engine.loop import TrainingLoop
+        from nuwa.guardrails.consistency import ConsistencyGuardrail
         from nuwa.guardrails.overfitting import OverfittingGuardrail
         from nuwa.guardrails.regression import RegressionGuardrail
-        from nuwa.guardrails.consistency import ConsistencyGuardrail
-        from nuwa.persistence.run_log import RunLog
+        from nuwa.llm.backend import LiteLLMBackend
         from nuwa.persistence.artifact_store import ArtifactStore
-        from nuwa.conversation.phases.running import RunningPhase
-        from nuwa.conversation.phases.approval import ApprovalPhase
+        from nuwa.persistence.run_log import RunLog
 
         llm_kwargs = config.build_llm_kwargs()
         backend = LiteLLMBackend(**llm_kwargs)
@@ -150,7 +149,7 @@ def train_cmd(
 
         # Show approval panel
         approval = ApprovalPhase()
-        decision = await approval.run(renderer, result)
+        await approval.run(renderer, result)
 
     asyncio.run(_run())
 
@@ -196,13 +195,13 @@ def run_cmd(
     renderer.status(f"最大轮数: {config.max_rounds}")
 
     # Build runtime objects from config
-    from nuwa.llm.backend import LiteLLMBackend
     from nuwa.engine.loop import TrainingLoop
+    from nuwa.guardrails.consistency import ConsistencyGuardrail
     from nuwa.guardrails.overfitting import OverfittingGuardrail
     from nuwa.guardrails.regression import RegressionGuardrail
-    from nuwa.guardrails.consistency import ConsistencyGuardrail
-    from nuwa.persistence.run_log import RunLog
+    from nuwa.llm.backend import LiteLLMBackend
     from nuwa.persistence.artifact_store import ArtifactStore
+    from nuwa.persistence.run_log import RunLog
 
     llm_kwargs = config.build_llm_kwargs()
     backend = LiteLLMBackend(**llm_kwargs)
@@ -381,4 +380,4 @@ def init_cmd(
     config = NuwaConfig()
     config.to_yaml(output)
     renderer.success(f"默认配置已生成: {output}")
-    renderer.status("编辑配置文件后，运行 'nuwa run --config {0}' 开始训练。".format(output))
+    renderer.status(f"编辑配置文件后，运行 'nuwa run --config {output}' 开始训练。")

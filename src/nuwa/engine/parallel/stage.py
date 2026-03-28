@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Any
 
 from jinja2 import Template
@@ -101,7 +100,7 @@ class ParallelExecutionStage:
             config=context.current_config or None,
         )
 
-        # Store as ScoredResult placeholders (score=0, reasoning TBD) so
+        # Store as ScoredResult placeholders (score=0, placeholder reasoning) so
         # downstream stages can work with a uniform type.
         context.train_results = [
             ScoredResult(

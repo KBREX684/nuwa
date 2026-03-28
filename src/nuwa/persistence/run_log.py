@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from nuwa.core.types import RoundResult
@@ -115,7 +115,7 @@ class RunLog:
             logger.info("No log file to archive at %s", self._log_path)
             return
 
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         archive_name = f"{_ARCHIVE_PREFIX}{ts}.jsonl"
         archive_path = self._log_dir / archive_name
         shutil.move(str(self._log_path), str(archive_path))
@@ -165,7 +165,7 @@ class RunLog:
                 fh.write(_TSV_HEADER)
 
             val_str = f"{val_score:.4f}" if val_score is not None else "N/A"
-            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             fh.write(
                 f"{round_num}\t{train_score:.4f}\t{val_str}\t{status}\t{safe_desc}\t{ts}\n"
             )

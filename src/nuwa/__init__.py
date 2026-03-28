@@ -15,15 +15,15 @@ from nuwa.connectors.http_api import HttpApiAdapter
 from nuwa.conversation.manager import ConversationManager
 from nuwa.engine.loop import TrainingLoop
 from nuwa.llm.backend import LiteLLMBackend
+from nuwa.sandbox.agent import SandboxedAgent
+
+# Sandbox isolation
+from nuwa.sandbox.manager import SandboxManager
 
 # SDK: decorator, one-liner, trainer
 from nuwa.sdk.decorator import trainable
 from nuwa.sdk.quick import train, train_sync
 from nuwa.sdk.trainer import NuwaTrainer
-
-# Sandbox isolation
-from nuwa.sandbox.manager import SandboxManager
-from nuwa.sandbox.agent import SandboxedAgent
 
 __all__ = [
     "__version__",

@@ -11,44 +11,35 @@ Verifies end-to-end that:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-# -- SDK / sandbox imports ---------------------------------------------------
-from nuwa.sdk.decorator import trainable, NuwaMeta
-from nuwa.sandbox.manager import SandboxManager
-from nuwa.sandbox.agent import SandboxedAgent
-from nuwa.sandbox.diff import deep_diff, format_diff_text, format_diff_html, DiffEntry
-
 # -- Core types --------------------------------------------------------------
 from nuwa.core.types import (
     AgentResponse,
-    EvalSample,
-    RoundResult,
-    ScoreCard,
-    ScoredResult,
     TrainingConfig,
     TrainingResult,
-    Reflection,
-    Mutation,
 )
 
 # -- Engine / trainer --------------------------------------------------------
 from nuwa.engine.loop import TrainingLoop
-from nuwa.sdk.trainer import NuwaTrainer
-from nuwa.sdk.quick import train_sync
 
 # -- Guardrails --------------------------------------------------------------
 from nuwa.guardrails.consistency import ConsistencyGuardrail
 from nuwa.guardrails.overfitting import OverfittingGuardrail
 from nuwa.guardrails.regression import RegressionGuardrail
+from nuwa.sandbox.agent import SandboxedAgent
+from nuwa.sandbox.diff import deep_diff, format_diff_html, format_diff_text
+from nuwa.sandbox.manager import SandboxManager
 
+# -- SDK / sandbox imports ---------------------------------------------------
+from nuwa.sdk.decorator import NuwaMeta, trainable
+from nuwa.sdk.quick import train_sync
+from nuwa.sdk.trainer import NuwaTrainer
 
 # ===========================================================================
 # Shared mocks (same pattern as test_full_loop.py)
@@ -449,7 +440,7 @@ class TestSDKTrainerWithSandbox:
     @pytest.mark.asyncio
     async def test_nuwa_trainer_promote_and_discard(self):
         """NuwaTrainer.promote() applies best config; discard() restores original."""
-        real_agent = MockTargetAgent(config={"prompt": "original"})
+        MockTargetAgent(config={"prompt": "original"})
         backend = MockModelBackend()
 
         # We need to use the NuwaTrainer high-level API which internally
@@ -492,7 +483,7 @@ class TestSDKTrainerWithSandbox:
         # Discard restores original
         discarded = trainer.discard()
         assert isinstance(discarded, dict)
-        print(f"  Promote/discard lifecycle: OK")
+        print("  Promote/discard lifecycle: OK")
 
 
 # ---------------------------------------------------------------------------

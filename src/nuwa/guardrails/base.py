@@ -8,7 +8,7 @@ single check that short-circuits on the first failure.
 from __future__ import annotations
 
 import logging
-from typing import Sequence
+from collections.abc import Sequence
 
 from nuwa.core.types import GuardrailVerdict, RoundResult
 

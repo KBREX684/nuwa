@@ -20,8 +20,9 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
-from dataclasses import dataclass, field
-from typing import Any, Callable, TypeVar, overload
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, TypeVar, overload
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -88,7 +89,7 @@ def _make_wrapper(func: Callable[..., Any], meta: NuwaMeta) -> Callable[..., Any
     if asyncio.iscoroutinefunction(func):
 
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             return await func(*args, **kwargs)
 
     else:

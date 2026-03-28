@@ -10,20 +10,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from nuwa.config.schema import NuwaConfig
 from nuwa.core.types import (
     RoundResult,
-    TrainingConfig,
     TrainingResult,
 )
 from nuwa.engine.loop import TrainingLoop
@@ -39,10 +38,13 @@ logger = logging.getLogger(__name__)
 # SSE dependency (sse-starlette)
 # ---------------------------------------------------------------------------
 
+EventSourceResponse: type[Any] | None
 try:
-    from sse_starlette.sse import EventSourceResponse
+    from sse_starlette.sse import EventSourceResponse as _EventSourceResponse
+
+    EventSourceResponse = _EventSourceResponse
 except ImportError:  # pragma: no cover
-    EventSourceResponse = None  # type: ignore[assignment,misc]
+    EventSourceResponse = None
 
 # ---------------------------------------------------------------------------
 # App-level mutable state
@@ -71,7 +73,7 @@ class ConfigRequest(BaseModel):
     llm_model: str = "openai/gpt-4o"
     llm_api_key: str | None = None
     llm_base_url: str | None = None
-    connector_type: str = "function"
+    connector_type: Literal["http", "cli", "function"] = "function"
     connector_params: dict[str, Any] = Field(default_factory=dict)
     training_direction: str = "Improve the target agent's response quality."
     max_rounds: int = 10
@@ -129,13 +131,13 @@ def _reset_state() -> None:
     _state["current_stage"] = ""
     _state["error_message"] = None
     _state["stop_requested"] = False
-    _state["event_queue"] = asyncio.Queue()
+    _state["event_queue"] = asyncio.Queue[dict[str, Any]]()
     _state["training_task"] = None
 
 
 def _push_event(event: dict[str, Any]) -> None:
     """Enqueue an SSE event dict (non-blocking)."""
-    q: asyncio.Queue | None = _state.get("event_queue")
+    q = cast(asyncio.Queue[dict[str, Any]] | None, _state.get("event_queue"))
     if q is not None:
         try:
             q.put_nowait(event)
@@ -145,12 +147,12 @@ def _push_event(event: dict[str, Any]) -> None:
 
 def _result_to_json(result: TrainingResult) -> dict[str, Any]:
     """Serialise a TrainingResult to a JSON-safe dict."""
-    return json.loads(result.model_dump_json())
+    return cast(dict[str, Any], json.loads(result.model_dump_json()))
 
 
 def _resolve_run_log() -> RunLog:
     """Resolve the most likely RunLog location with backward compatibility."""
-    cfg: NuwaConfig | None = _state.get("current_config")  # type: ignore[assignment]
+    cfg = cast(NuwaConfig | None, _state.get("current_config"))
     candidates: list[Path] = []
 
     if cfg is not None:
@@ -199,7 +201,7 @@ async def post_config(body: ConfigRequest) -> JSONResponse:
     try:
         cfg = NuwaConfig(
             llm_model=body.llm_model,
-            llm_api_key=body.llm_api_key,
+            llm_api_key=SecretStr(body.llm_api_key) if body.llm_api_key else None,
             llm_base_url=body.llm_base_url,
             connector_type=body.connector_type,
             connector_params=body.connector_params,
@@ -320,7 +322,7 @@ async def train_start() -> JSONResponse:
             {"error": "Training is already running."}, status_code=409,
         )
 
-    cfg: NuwaConfig | None = _state.get("current_config")  # type: ignore[assignment]
+    cfg = cast(NuwaConfig | None, _state.get("current_config"))
     if cfg is None:
         return JSONResponse(
             {"error": "No configuration set. POST /api/config first."},
@@ -352,7 +354,7 @@ async def train_start() -> JSONResponse:
 async def train_stop() -> JSONResponse:
     """Request the training loop to stop after the current round."""
     _state["stop_requested"] = True
-    task: asyncio.Task | None = _state.get("training_task")
+    task = cast(asyncio.Task[Any] | None, _state.get("training_task"))
     if task is not None and not task.done():
         task.cancel()
     return JSONResponse({"ok": True})
@@ -363,9 +365,12 @@ async def train_stop() -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 
-async def _event_generator(request: Request):
+async def _event_generator(request: Request) -> AsyncIterator[dict[str, str]]:
     """Yield SSE events from the queue with keepalive pings."""
-    q: asyncio.Queue = _state.get("event_queue") or asyncio.Queue()
+    q = cast(
+        asyncio.Queue[dict[str, Any]],
+        _state.get("event_queue") or asyncio.Queue[dict[str, Any]](),
+    )
     if _state.get("event_queue") is None:
         _state["event_queue"] = q
 
@@ -375,7 +380,7 @@ async def _event_generator(request: Request):
         try:
             event = await asyncio.wait_for(q.get(), timeout=15.0)
             yield {"data": json.dumps(event)}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Keepalive ping
             yield {"event": "ping", "data": ""}
         except asyncio.CancelledError:
@@ -383,7 +388,7 @@ async def _event_generator(request: Request):
 
 
 @app.get("/api/train/events")
-async def train_events(request: Request):
+async def train_events(request: Request) -> Any:
     """Server-Sent Events endpoint for real-time training updates."""
     if EventSourceResponse is None:
         return JSONResponse(
@@ -475,7 +480,7 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
         return JSONResponse({"ok": True})
 
     elif body.decision == "extend":
-        cfg: NuwaConfig | None = _state.get("current_config")  # type: ignore[assignment]
+        cfg = cast(NuwaConfig | None, _state.get("current_config"))
         if cfg is None:
             return JSONResponse(
                 {"error": "No configuration available."}, status_code=400,

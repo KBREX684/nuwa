@@ -105,7 +105,7 @@ class ApprovalPhase:
         table.add_column("阶段", style="bold")
         table.add_column("均分", justify="right")
         table.add_row("初始 (第 0 轮)", f"{first:.3f}")
-        table.add_row("最佳 (第 {0} 轮)".format(result.best_round), f"{best:.3f}")
+        table.add_row(f"最佳 (第 {result.best_round} 轮)", f"{best:.3f}")
         table.add_row("变化", f"[{colour}]{delta:+.3f}[/{colour}]")
         console.print(table)
 

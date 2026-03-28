@@ -12,6 +12,7 @@ import json
 import logging
 import re
 from pathlib import Path
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class ArtifactStore:
     # Config snapshots
     # ------------------------------------------------------------------
 
-    def save_config_snapshot(self, round_num: int, config: dict) -> None:
+    def save_config_snapshot(self, round_num: int, config: dict[str, Any]) -> None:
         """Persist *config* as ``round_<N>_config.json``.
 
         Parameters
@@ -54,13 +55,14 @@ class ArtifactStore:
         )
         logger.debug("Saved config snapshot for round %d at %s", round_num, path)
 
-    def load_config_snapshot(self, round_num: int) -> dict | None:
+    def load_config_snapshot(self, round_num: int) -> dict[str, Any] | None:
         """Load the config snapshot for *round_num*, or ``None`` if absent."""
         path = self._config_path(round_num)
         if not path.exists():
             return None
         text = path.read_text(encoding="utf-8")
-        return json.loads(text)  # type: ignore[no-any-return]
+        loaded = json.loads(text)
+        return cast(dict[str, Any], loaded)
 
     # ------------------------------------------------------------------
     # Prompt snapshots

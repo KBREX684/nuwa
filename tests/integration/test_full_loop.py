@@ -6,7 +6,6 @@ exercises all guardrails, and validates persistence via RunLog.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import tempfile
 import time
@@ -29,7 +28,6 @@ from nuwa.guardrails.consistency import ConsistencyGuardrail
 from nuwa.guardrails.overfitting import OverfittingGuardrail
 from nuwa.guardrails.regression import RegressionGuardrail
 from nuwa.persistence.run_log import RunLog
-
 
 # ---------------------------------------------------------------------------
 # Mock model backend
@@ -352,7 +350,7 @@ async def test_full_training_loop() -> None:
     print(f"\n  Config changes applied: {target._config_change_count}")
 
     # ---- Print summary ----
-    print(f"\n===== TEST RESULTS SUMMARY =====")
+    print("\n===== TEST RESULTS SUMMARY =====")
     print(f"  Total rounds executed: {len(result.rounds)}")
     print(f"  Best round: {result.best_round}")
     print(f"  Best val score: {result.best_val_score:.4f}")
@@ -363,7 +361,7 @@ async def test_full_training_loop() -> None:
     print(f"  Agent invocations: {target._invocation_count}")
     print(f"  Config changes: {target._config_change_count}")
 
-    print(f"\n  Round-by-round breakdown:")
+    print("\n  Round-by-round breakdown:")
     for rr in result.rounds:
         train_mean = rr.train_scores.mean_score
         val_mean = rr.val_scores.mean_score if rr.val_scores else 0.0
@@ -375,13 +373,13 @@ async def test_full_training_loop() -> None:
         )
 
     if tracker.events:
-        print(f"\n  Mutations applied:")
+        print("\n  Mutations applied:")
         for ev in tracker.events:
             if ev["applied"]:
                 print(f"    Round {ev['round']}: {ev['mutation'][:80]}")
 
     print(f"\n  Test elapsed time: {elapsed:.2f}s")
-    print(f"===== END SUMMARY =====\n")
+    print("===== END SUMMARY =====\n")
 
 
 # ---------------------------------------------------------------------------
@@ -498,11 +496,11 @@ def test_persistence_run_log() -> None:
         print(f"  Latest round: {latest.round_num}")
         print(f"  Best round: {best.round_num} (val={best.val_scores.mean_score:.4f})")
         print(f"  TSV lines: {len(tsv_lines)}")
-        print(f"\n  TSV content:")
+        print("\n  TSV content:")
         for line in tsv_lines:
             print(f"    {line}")
 
-    print(f"\n===== END PERSISTENCE TEST =====\n")
+    print("\n===== END PERSISTENCE TEST =====\n")
 
 
 # ---------------------------------------------------------------------------
@@ -553,4 +551,4 @@ def test_guardrails_with_round_history() -> None:
     assert not verdict.passed, "Regression should be flagged"
     print(f"  RegressionGuardrail (drop): FLAGGED - {verdict.reason[:80]}")
 
-    print(f"\n===== END GUARDRAILS TEST =====\n")
+    print("\n===== END GUARDRAILS TEST =====\n")

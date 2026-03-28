@@ -39,6 +39,7 @@ dev = [
     "pytest-asyncio",
     "ruff",
     "mypy",
+    "types-PyYAML",
 ]
 web = [
     "fastapi>=0.110",
@@ -50,9 +51,9 @@ web = [
 nuwa = "nuwa.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/nuwa-ai/nuwa-trainer"
-Repository = "https://github.com/nuwa-ai/nuwa-trainer"
-Issues = "https://github.com/nuwa-ai/nuwa-trainer/issues"
+Homepage = "https://github.com/KBREX684/nuwa"
+Repository = "https://github.com/KBREX684/nuwa"
+Issues = "https://github.com/KBREX684/nuwa/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nuwa"]
@@ -65,12 +66,11 @@ line-length = 100
 select = [
     "E",      # pycodestyle errors
     "F",      # pyflakes
+    "I",      # import sorting
+    "UP",     # pyupgrade
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
-    "F401",   # imported but unused (legacy codebase, phased cleanup)
-    "F541",   # f-string without placeholders (legacy output formatting)
-    "F841",   # local variable assigned but never used (legacy code paths)
 ]
 
 [tool.ruff.lint.isort]
@@ -86,17 +86,7 @@ asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.11"
-strict = false
-warn_return_any = false
+strict = true
+warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
-disable_error_code = [
-    "attr-defined",
-    "arg-type",
-    "import-untyped",
-    "no-any-return",
-    "no-untyped-def",
-    "type-arg",
-    "union-attr",
-    "unused-ignore",
-]

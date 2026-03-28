@@ -9,7 +9,6 @@ from typing import Any
 import aiohttp
 
 from nuwa.core.exceptions import ConnectorError
-from nuwa.core.protocols import TargetAgent
 from nuwa.core.types import AgentResponse
 
 logger = logging.getLogger(__name__)

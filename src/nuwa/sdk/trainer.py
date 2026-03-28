@@ -22,8 +22,9 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from nuwa.connectors.function_call import FunctionCallAdapter
 from nuwa.core.protocols import TargetAgent

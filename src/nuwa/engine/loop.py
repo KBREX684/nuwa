@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Callable
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from nuwa.core.exceptions import GuardrailTriggered, TrainingAborted
 from nuwa.core.protocols import Guardrail, ModelBackend, Stage, TargetAgent
@@ -42,7 +43,7 @@ class TrainingLoop:
         config: TrainingConfig,
         backend: ModelBackend,
         target: TargetAgent,
-        guardrails: list[Guardrail],
+        guardrails: Sequence[Guardrail],
         callbacks: list[Callable[..., Any]] | None = None,
         sandbox: SandboxManager | None = None,
         parallel_config: dict[str, Any] | None = None,
@@ -50,7 +51,7 @@ class TrainingLoop:
         self._config = config
         self._backend = backend
         self._target = target
-        self._guardrails = guardrails
+        self._guardrails = list(guardrails)
         self._callbacks = callbacks or []
         self._sandbox = sandbox
         self._scheduler = TrainingScheduler(config)
@@ -215,11 +216,19 @@ class TrainingLoop:
                     raise
 
             # Build RoundResult for this round.
+            if context.train_scores is None:
+                raise TrainingAborted(
+                    f"round {round_num} missing train_scores after evaluation stage"
+                )
+            if context.reflection is None:
+                raise TrainingAborted(
+                    f"round {round_num} missing reflection after reflection stage"
+                )
             round_result = RoundResult(
                 round_num=round_num,
-                train_scores=context.train_scores,  # type: ignore[arg-type]
+                train_scores=context.train_scores,
                 val_scores=context.val_scores,
-                reflection=context.reflection,  # type: ignore[arg-type]
+                reflection=context.reflection,
                 mutation=context.proposed_mutation,
                 applied=context.proposed_mutation is not None,
             )

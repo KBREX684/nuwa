@@ -15,7 +15,7 @@ import litellm
 from pydantic import BaseModel
 
 from nuwa.core.exceptions import LLMError
-from nuwa.llm.response_parser import parse_json_response, parse_structured
+from nuwa.llm.response_parser import parse_structured
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +27,15 @@ _INITIAL_BACKOFF_S: float = 1.0
 _BACKOFF_MULTIPLIER: float = 2.0
 
 # LiteLLM exceptions that warrant a retry
-_RETRYABLE_EXCEPTIONS = (
-    litellm.RateLimitError,
-    litellm.ServiceUnavailableError,
-    litellm.Timeout,
-)
+_RETRYABLE_ERROR_NAMES = {
+    "RateLimitError",
+    "ServiceUnavailableError",
+    "Timeout",
+}
+_UNSUPPORTED_RESPONSE_FORMAT_ERRORS = {
+    "BadRequestError",
+    "NotFoundError",
+}
 
 
 class LiteLLMBackend:
@@ -150,18 +154,21 @@ class LiteLLMBackend:
             self._log_usage(response)
             raw_text = response.choices[0].message.content or ""
             return parse_structured(raw_text, response_schema)
-        except (litellm.BadRequestError, litellm.NotFoundError):
-            # Provider does not support response_format — fall back
-            logger.debug(
-                "Provider does not support response_format; "
-                "falling back to plain-text JSON extraction."
-            )
-        except LLMError:
-            # Structured parse failed on native JSON mode output; fall back
-            logger.debug(
-                "Native JSON mode returned unparseable output; retrying "
-                "with plain-text extraction."
-            )
+        except Exception as exc:
+            if isinstance(exc, LLMError):
+                # Structured parse failed on native JSON mode output; fall back
+                logger.debug(
+                    "Native JSON mode returned unparseable output; retrying "
+                    "with plain-text extraction."
+                )
+            elif type(exc).__name__ in _UNSUPPORTED_RESPONSE_FORMAT_ERRORS:
+                # Provider does not support response_format — fall back
+                logger.debug(
+                    "Provider does not support response_format; "
+                    "falling back to plain-text JSON extraction."
+                )
+            else:
+                raise
 
         # Fallback: plain completion + parse
         raw_text = await self.complete(messages, **kwargs)
@@ -197,21 +204,22 @@ class LiteLLMBackend:
                     **call_kwargs,
                 )
                 return response
-            except _RETRYABLE_EXCEPTIONS as exc:
-                last_exc = exc
-                if attempt < _MAX_RETRIES:
-                    logger.warning(
-                        "LLM call attempt %d/%d failed with %s: %s — "
-                        "retrying in %.1fs",
-                        attempt,
-                        _MAX_RETRIES,
-                        type(exc).__name__,
-                        exc,
-                        backoff,
-                    )
-                    await asyncio.sleep(backoff)
-                    backoff *= _BACKOFF_MULTIPLIER
             except Exception as exc:
+                if type(exc).__name__ in _RETRYABLE_ERROR_NAMES:
+                    last_exc = exc
+                    if attempt < _MAX_RETRIES:
+                        logger.warning(
+                            "LLM call attempt %d/%d failed with %s: %s - "
+                            "retrying in %.1fs",
+                            attempt,
+                            _MAX_RETRIES,
+                            type(exc).__name__,
+                            exc,
+                            backoff,
+                        )
+                        await asyncio.sleep(backoff)
+                        backoff *= _BACKOFF_MULTIPLIER
+                    continue
                 raise LLMError(
                     f"LLM call failed with non-retryable error: {exc}"
                 ) from exc

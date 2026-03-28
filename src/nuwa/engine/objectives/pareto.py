@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from typing import Any
 
 from nuwa.engine.objectives.types import ObjectiveSet
 
@@ -20,7 +21,7 @@ class ParetoPoint:
     """A point on the Pareto frontier."""
 
     round_num: int
-    config: dict = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
     scores: dict[str, float] = field(default_factory=dict)
     weighted_score: float = 0.0
 
@@ -45,7 +46,12 @@ class ParetoTracker:
     # Core operations
     # ------------------------------------------------------------------
 
-    def add(self, round_num: int, config: dict, scores: dict[str, float]) -> bool:
+    def add(
+        self,
+        round_num: int,
+        config: dict[str, Any],
+        scores: dict[str, float],
+    ) -> bool:
         """Add a new point.  Returns ``True`` if it lies on the Pareto frontier."""
         weights = self._objectives.weights_dict()
         total_weight = sum(weights.values()) or 1.0
@@ -185,28 +191,30 @@ class ParetoTracker:
 
         return suggestions
 
-    def summary(self) -> dict:
+    def summary(self) -> dict[str, Any]:
         """Return a summary dict suitable for logging / display."""
         if not self._frontier:
             return {"frontier_size": 0, "points": [], "suggestions": []}
 
         best = self.best_weighted()
+        objective_bests: dict[str, dict[str, float | int]] = {}
+        for obj in self._objectives.objectives:
+            best_point = self.best_by_objective(obj.name)
+            if best_point is None:
+                objective_bests[obj.name] = {
+                    "best_value": 0.0,
+                    "best_round": -1,
+                }
+            else:
+                objective_bests[obj.name] = {
+                    "best_value": best_point.scores.get(obj.name, 0.0),
+                    "best_round": best_point.round_num,
+                }
+
         return {
             "frontier_size": len(self._frontier),
             "best_weighted_score": best.weighted_score if best else 0.0,
             "best_weighted_round": best.round_num if best else -1,
-            "objective_bests": {
-                obj.name: {
-                    "best_value": (
-                        self.best_by_objective(obj.name).scores.get(obj.name, 0.0)
-                        if self.best_by_objective(obj.name) else 0.0
-                    ),
-                    "best_round": (
-                        self.best_by_objective(obj.name).round_num
-                        if self.best_by_objective(obj.name) else -1
-                    ),
-                }
-                for obj in self._objectives.objectives
-            },
+            "objective_bests": objective_bests,
             "suggestions": self.get_improvement_suggestions(),
         }

@@ -54,7 +54,7 @@ class ValidationStage:
                         target.invoke(sample_input, config=context.current_config or None),
                         timeout=_INVOKE_TIMEOUT_S,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     elapsed = (time.perf_counter() - start) * 1000.0
                     response = AgentResponse(
                         output_text="[ERROR: agent timed out]",

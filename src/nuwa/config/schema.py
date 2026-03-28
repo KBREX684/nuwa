@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import yaml
 from pydantic import BaseModel, Field, SecretStr, model_validator
@@ -114,11 +114,12 @@ class NuwaConfig(BaseModel):
         NuwaConfig
         """
         text = Path(path).read_text(encoding="utf-8")
-        data = yaml.safe_load(text)
-        if not isinstance(data, dict):
+        loaded = yaml.safe_load(text)
+        if not isinstance(loaded, dict):
             raise ValueError(
-                f"Expected a YAML mapping in {path}, got {type(data).__name__}"
+                f"Expected a YAML mapping in {path}, got {type(loaded).__name__}"
             )
+        data = cast(dict[str, Any], loaded)
         return cls.model_validate(data)
 
     def to_yaml(self, path: Path) -> None:
@@ -184,7 +185,7 @@ class NuwaConfig(BaseModel):
 
     def _serialisable_dict(self) -> dict[str, Any]:
         """Produce a JSON-safe dict, masking secrets."""
-        data = json.loads(self.model_dump_json())
+        data = cast(dict[str, Any], json.loads(self.model_dump_json()))
         # Normalise Path objects to strings for YAML readability.
         if "project_dir" in data:
             data["project_dir"] = str(self.project_dir)

@@ -6,11 +6,11 @@ import copy
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from nuwa.sandbox.agent import ConfigSnapshot, SandboxedAgent
+from nuwa.sandbox.agent import SandboxedAgent
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ class SandboxManager:
         try:
             data = {
                 "session_id": session_id,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
                 "original_config": original_config,
                 "status": "active",
             }
@@ -203,7 +203,7 @@ class SandboxManager:
         try:
             data = {
                 "session_id": sandboxed.session_id,
-                "promoted_at": datetime.now(timezone.utc).isoformat(),
+                "promoted_at": datetime.now(UTC).isoformat(),
                 "mutation_count": sandboxed.mutation_count,
                 "promoted_config": promoted_config,
                 "diff": sandboxed.get_diff(),
@@ -228,7 +228,7 @@ class SandboxManager:
         try:
             data = {
                 "session_id": sandboxed.session_id,
-                "discarded_at": datetime.now(timezone.utc).isoformat(),
+                "discarded_at": datetime.now(UTC).isoformat(),
                 "mutation_count": sandboxed.mutation_count,
                 "diff_at_discard": sandboxed.get_diff(),
             }

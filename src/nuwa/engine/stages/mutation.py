@@ -27,7 +27,6 @@ class MutationStage:
 
     async def execute(self, context: LoopContext) -> LoopContext:
         backend = context.backend_ref
-        target = context.target_ref
         reflection = context.reflection
 
         if reflection is None:

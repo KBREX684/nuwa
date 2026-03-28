@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
 
 from nuwa.core.types import AgentResponse, EvalSample, LoopContext, ScoredResult
 
@@ -42,7 +41,7 @@ class ExecutionStage:
                         timeout=_INVOKE_TIMEOUT_S,
                     )
                     return sample, response
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     elapsed_ms = (time.perf_counter() - start) * 1000.0
                     logger.warning(
                         "Sample %s timed out after %.0f ms", sample.id, elapsed_ms
@@ -77,7 +76,7 @@ class ExecutionStage:
             *(_run_one(s) for s in samples)
         )
 
-        # Store as ScoredResult placeholders (score=0, reasoning TBD) so
+        # Store as ScoredResult placeholders (score=0, placeholder reasoning) so
         # downstream stages can work with a uniform type.  The EvaluationStage
         # will overwrite scores.
         context.train_results = [
