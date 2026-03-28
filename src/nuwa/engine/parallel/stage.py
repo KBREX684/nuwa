@@ -329,10 +329,12 @@ class ParallelValidationStage:
                 try:
                     raw = await backend.complete(messages, temperature=0.1)
                     data = parse_json_response(raw)
-                    score = float(data.get("score", 0.0))  # type: ignore[union-attr]
+                    if not isinstance(data, dict):
+                        raise LLMError("Scoring response must be a JSON object.")
+                    score = float(data.get("score", 0.0))
                     score = max(0.0, min(1.0, score))
-                    reasoning_en = data.get("reasoning_en", "")  # type: ignore[union-attr]
-                    reasoning_zh = data.get("reasoning_zh", "")  # type: ignore[union-attr]
+                    reasoning_en = data.get("reasoning_en", "")
+                    reasoning_zh = data.get("reasoning_zh", "")
                     reasoning = str(
                         reasoning_en or reasoning_zh or "(no reasoning)"
                     )

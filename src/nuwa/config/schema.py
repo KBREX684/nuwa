@@ -10,6 +10,7 @@ from typing import Any, Literal, cast
 import yaml
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
+from nuwa.core.defaults import DEFAULT_LLM_MODEL, DEFAULT_LLM_TEMPERATURE
 from nuwa.core.types import TrainingConfig
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class NuwaConfig(BaseModel):
 
     # -- LLM settings --------------------------------------------------
     llm_model: str = Field(
-        default="openai/gpt-4o",
+        default=DEFAULT_LLM_MODEL,
         description="Model identifier in ``provider/model`` format.",
     )
     llm_api_key: SecretStr | None = Field(
@@ -39,7 +40,7 @@ class NuwaConfig(BaseModel):
         description="Optional base URL override for the LLM provider.",
     )
     llm_temperature: float = Field(
-        default=0.7,
+        default=DEFAULT_LLM_TEMPERATURE,
         ge=0.0,
         le=2.0,
         description="Sampling temperature for LLM calls.",

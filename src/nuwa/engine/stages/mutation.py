@@ -8,6 +8,7 @@ from typing import Any
 
 from jinja2 import Template
 
+from nuwa.core.defaults import MAX_MUTATIONS_PER_PROPOSAL, TEMPERATURE_MUTATION
 from nuwa.core.exceptions import LLMError
 from nuwa.core.types import LoopContext, Mutation
 from nuwa.llm.prompts import MUTATION_PROPOSAL
@@ -49,7 +50,7 @@ class MutationStage:
             reflection_json=reflection_json,
             current_prompt=current_prompt,
             current_config=config_json,
-            max_mutations=5,
+            max_mutations=MAX_MUTATIONS_PER_PROPOSAL,
         )
 
         messages: list[dict[str, Any]] = [
@@ -60,7 +61,7 @@ class MutationStage:
         logger.info("Round %d: generating mutation proposal", context.round_num)
 
         try:
-            raw = await backend.complete(messages, temperature=0.4)
+            raw = await backend.complete(messages, temperature=TEMPERATURE_MUTATION)
             data = parse_json_response(raw)
             if not isinstance(data, dict):
                 raise LLMError("Mutation response is not a JSON object.")

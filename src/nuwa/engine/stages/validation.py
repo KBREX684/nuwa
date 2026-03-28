@@ -9,6 +9,12 @@ from typing import Any
 
 from jinja2 import Template
 
+from nuwa.core.defaults import (
+    DEFAULT_MAX_CONCURRENCY,
+    INVOKE_TIMEOUT_S,
+    PASS_THRESHOLD,
+    TEMPERATURE_SCORING,
+)
 from nuwa.core.exceptions import LLMError
 from nuwa.core.types import AgentResponse, LoopContext, ScoreCard, ScoredResult
 from nuwa.llm.prompts import OUTPUT_SCORING
@@ -18,9 +24,9 @@ logger = logging.getLogger(__name__)
 
 _SCORING_TEMPLATE = Template(OUTPUT_SCORING)
 
-_MAX_CONCURRENCY = 5
-_INVOKE_TIMEOUT_S = 120.0
-_PASS_THRESHOLD = 0.7
+_MAX_CONCURRENCY = DEFAULT_MAX_CONCURRENCY
+_INVOKE_TIMEOUT_S = INVOKE_TIMEOUT_S
+_PASS_THRESHOLD = PASS_THRESHOLD
 
 
 class ValidationStage:
@@ -164,13 +170,15 @@ class ValidationStage:
         ]
 
         try:
-            raw = await backend.complete(messages, temperature=0.1)
+            raw = await backend.complete(messages, temperature=TEMPERATURE_SCORING)
             data = parse_json_response(raw)
-            score = float(data.get("score", 0.0))  # type: ignore[union-attr]
+            if not isinstance(data, dict):
+                raise LLMError("Scoring response must be a JSON object.")
+            score = float(data.get("score", 0.0))
             score = max(0.0, min(1.0, score))
-            reasoning_en = data.get("reasoning_en", "")  # type: ignore[union-attr]
-            reasoning_zh = data.get("reasoning_zh", "")  # type: ignore[union-attr]
-            axis_raw = data.get("axis_scores", {})  # type: ignore[union-attr]
+            reasoning_en = data.get("reasoning_en", "")
+            reasoning_zh = data.get("reasoning_zh", "")
+            axis_raw = data.get("axis_scores", {})
             axis_scores: dict[str, float] | None = None
             if isinstance(axis_raw, dict):
                 axis_scores = {}

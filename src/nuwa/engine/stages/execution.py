@@ -6,12 +6,13 @@ import asyncio
 import logging
 import time
 
+from nuwa.core.defaults import DEFAULT_MAX_CONCURRENCY, INVOKE_TIMEOUT_S
 from nuwa.core.types import AgentResponse, EvalSample, LoopContext, ScoredResult
 
 logger = logging.getLogger(__name__)
 
-_MAX_CONCURRENCY = 5
-_INVOKE_TIMEOUT_S = 120.0
+_MAX_CONCURRENCY = DEFAULT_MAX_CONCURRENCY
+_INVOKE_TIMEOUT_S = INVOKE_TIMEOUT_S
 
 
 class ExecutionStage:

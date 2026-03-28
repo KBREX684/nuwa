@@ -355,7 +355,9 @@ class ParallelEvaluator:
         try:
             raw = await judge.backend.complete(messages, temperature=0.1)
             data = parse_json_response(raw)
-            score = float(data.get("score", 0.0))  # type: ignore[union-attr]
+            if not isinstance(data, dict):
+                raise LLMError("Scoring response must be a JSON object.")
+            score = float(data.get("score", 0.0))
             return max(0.0, min(1.0, score))
         except (LLMError, KeyError, TypeError, ValueError) as exc:
             logger.warning(

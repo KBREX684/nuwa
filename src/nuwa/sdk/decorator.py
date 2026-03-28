@@ -98,7 +98,7 @@ def _make_wrapper(func: Callable[..., Any], meta: NuwaMeta) -> Callable[..., Any
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             return func(*args, **kwargs)
 
-    wrapper.nuwa_meta = meta  # type: ignore[attr-defined]
+    setattr(wrapper, "nuwa_meta", meta)
     _attach_convenience_methods(wrapper, meta)
     return wrapper
 

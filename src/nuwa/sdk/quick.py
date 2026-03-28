@@ -26,14 +26,19 @@ logger = logging.getLogger(__name__)
 
 async def train(
     agent: Callable[..., Any] | TargetAgent,
-    direction: str,
+    training_direction: str,
     *,
     model: str = "openai/gpt-4o",
-    api_key: str | None = None,
-    max_rounds: int = 5,
+    llm_api_key: str | None = None,
+    llm_base_url: str | None = None,
+    max_rounds: int = 10,
     auto_promote: bool = False,
     promote_threshold: float = 0.8,
     verbose: bool = True,
+    # Backward-compatible aliases
+    direction: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
     **kwargs: Any,
 ) -> TrainingResult:
     """One-liner training function.
@@ -47,12 +52,14 @@ async def train(
     agent:
         The agent to train -- a plain callable, a ``@trainable``-decorated
         function, or any ``TargetAgent`` implementation.
-    direction:
+    training_direction:
         Natural-language training goal (e.g. ``"提升回答质量"``).
     model:
         LLM model identifier in ``provider/model`` format.
-    api_key:
+    llm_api_key:
         Optional API key override for the LLM provider.
+    llm_base_url:
+        Optional base URL override for the LLM provider.
     max_rounds:
         Maximum number of training rounds.
     auto_promote:
@@ -71,13 +78,22 @@ async def train(
     TrainingResult
         Complete summary of the training run.
     """
+    # Resolve backward-compatible aliases
+    if direction is not None:
+        training_direction = direction
+    if api_key is not None and llm_api_key is None:
+        llm_api_key = api_key
+    if base_url is not None and llm_base_url is None:
+        llm_base_url = base_url
+
     from nuwa.sdk.trainer import NuwaTrainer
 
     trainer = NuwaTrainer(
         agent=agent,
-        direction=direction,
+        training_direction=training_direction,
         model=model,
-        api_key=api_key,
+        llm_api_key=llm_api_key,
+        llm_base_url=llm_base_url,
         max_rounds=max_rounds,
         verbose=verbose,
         **kwargs,
@@ -105,7 +121,9 @@ async def train(
 
 def train_sync(
     agent: Callable[..., Any] | TargetAgent,
-    direction: str,
+    training_direction: str = "",
+    *,
+    direction: str | None = None,
     **kwargs: Any,
 ) -> TrainingResult:
     """Synchronous version of :func:`train` for non-async contexts.
@@ -117,8 +135,10 @@ def train_sync(
     ----------
     agent:
         The agent to train.
-    direction:
+    training_direction:
         Natural-language training goal.
+    direction:
+        Backward-compatible alias for *training_direction*.
     **kwargs:
         All other keyword arguments are forwarded to :func:`train`.
 
@@ -127,4 +147,6 @@ def train_sync(
     TrainingResult
         Complete summary of the training run.
     """
-    return asyncio.run(train(agent, direction, **kwargs))
+    if direction is not None and not training_direction:
+        training_direction = direction
+    return asyncio.run(train(agent, training_direction, **kwargs))

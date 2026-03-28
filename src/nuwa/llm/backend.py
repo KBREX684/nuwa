@@ -14,6 +14,13 @@ from typing import Any, TypeVar
 import litellm
 from pydantic import BaseModel
 
+from nuwa.core.defaults import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_TEMPERATURE,
+    LLM_BACKOFF_MULTIPLIER,
+    LLM_INITIAL_BACKOFF_S,
+    LLM_MAX_RETRIES,
+)
 from nuwa.core.exceptions import LLMError
 from nuwa.llm.response_parser import parse_structured
 
@@ -22,9 +29,9 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 # Retry configuration
-_MAX_RETRIES: int = 3
-_INITIAL_BACKOFF_S: float = 1.0
-_BACKOFF_MULTIPLIER: float = 2.0
+_MAX_RETRIES: int = LLM_MAX_RETRIES
+_INITIAL_BACKOFF_S: float = LLM_INITIAL_BACKOFF_S
+_BACKOFF_MULTIPLIER: float = LLM_BACKOFF_MULTIPLIER
 
 # LiteLLM exceptions that warrant a retry
 _RETRYABLE_ERROR_NAMES = {
@@ -58,10 +65,10 @@ class LiteLLMBackend:
 
     def __init__(
         self,
-        model: str = "openai/gpt-4o",
+        model: str = DEFAULT_LLM_MODEL,
         api_key: str | None = None,
         base_url: str | None = None,
-        temperature: float = 0.7,
+        temperature: float = DEFAULT_LLM_TEMPERATURE,
         max_tokens: int = 4096,
     ) -> None:
         self.model = model

@@ -127,11 +127,13 @@ class OverfittingGuardrail(BaseGuardrail):
 
         # --- Trigger 1: absolute threshold -----------------------------------
         if gap > self._threshold:
+            val_scores = latest.val_scores
+            assert val_scores is not None  # guaranteed by _gap returning non-None
             reason = (
                 f"Overfitting detected in round {latest.round_num}: "
                 f"train/val gap {gap:.4f} exceeds threshold {self._threshold:.4f} "
                 f"(train={latest.train_scores.mean_score:.4f}, "
-                f"val={latest.val_scores.mean_score:.4f})."  # type: ignore[union-attr]
+                f"val={val_scores.mean_score:.4f})."
             )
             logger.warning("%s: %s", self.name, reason)
             return GuardrailVerdict(
