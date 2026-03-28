@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -33,6 +35,17 @@ from nuwa.llm.backend import LiteLLMBackend
 from nuwa.persistence.run_log import RunLog
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Security: API Key authentication (optional)
+# ---------------------------------------------------------------------------
+
+# Set NUWA_API_KEY to enable authentication.  When set, all /api/* endpoints
+# require an ``X-API-Key`` header or ``Authorization: Bearer <key>`` header
+# matching this value.  Leave unset to disable auth (e.g. local development).
+_API_KEY: str | None = os.environ.get("NUWA_API_KEY")
+_UNAUTH_MSG = {"error": "Unauthorized. Provide X-API-Key header."}
+_SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9._/\-]+$")
 
 # ---------------------------------------------------------------------------
 # SSE dependency (sse-starlette)
@@ -96,13 +109,62 @@ class ApproveRequest(BaseModel):
 
 app = FastAPI(title="Nuwa Training Dashboard", version="0.1.0")
 
+# ---------------------------------------------------------------------------
+# CORS — origins read from NUWA_CORS_ORIGINS (comma-separated).
+# Defaults to ["http://localhost:8080", "http://127.0.0.1:8080"] for safety.
+# Set to "*" only for local-only development via NUWA_CORS_ORIGINS=*.
+# ---------------------------------------------------------------------------
+_cors_env = os.environ.get("NUWA_CORS_ORIGINS", "")
+if _cors_env.strip() == "*":
+    _cors_origins: list[str] = ["*"]
+elif _cors_env.strip():
+    _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+else:
+    _cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Authentication middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next: Any) -> Any:
+    """If NUWA_API_KEY is set, enforce API key on all /api/* routes."""
+    if _API_KEY is None:
+        return await call_next(request)
+
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+
+    # Check X-API-Key header first, then Authorization: Bearer ...
+    provided = request.headers.get("x-api-key") or ""
+    if not provided:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            provided = auth_header[7:].strip()
+
+    if provided != _API_KEY:
+        logger.warning("Unauthorized request to %s from %s", request.url.path, request.client)
+        return JSONResponse(_UNAUTH_MSG, status_code=401)
+
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# Safe error helper — never expose internal exception text to clients
+# ---------------------------------------------------------------------------
+
+def _safe_error(exc: Exception, status_code: int = 400) -> JSONResponse:
+    """Return a generic error to the client; log the real exception."""
+    logger.exception("Request failed: %s", exc)
+    return JSONResponse({"error": "Request failed. Check server logs for details."}, status_code=status_code)
 
 # ---------------------------------------------------------------------------
 # Startup
@@ -115,6 +177,30 @@ async def _on_startup() -> None:
     project_dir = Path(".nuwa")
     project_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Nuwa project directory ensured at %s", project_dir.resolve())
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    """Gracefully clean up on server shutdown."""
+    # Cancel running training task.
+    task = cast(asyncio.Task[Any] | None, _state.get("training_task"))
+    if task is not None and not task.done():
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=5.0)
+        except (asyncio.CancelledError, TimeoutError):
+            pass
+
+    # Flush event queue.
+    q = cast(asyncio.Queue[dict[str, Any]] | None, _state.get("event_queue"))
+    if q is not None:
+        while not q.empty():
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+    logger.info("Nuwa server shutdown complete.")
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +302,7 @@ async def post_config(body: ConfigRequest) -> JSONResponse:
         _state["current_config"] = cfg
         return JSONResponse({"ok": True})
     except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return _safe_error(exc, 400)
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +408,7 @@ async def _run_training(
         logger.exception("Training failed")
         _state["training_status"] = "error"
         _state["error_message"] = str(exc)
-        _push_event({"type": "error", "message": str(exc)})
+        _push_event({"type": "error", "message": "Training error. Check server logs."})
 
 
 @app.post("/api/train/start")
@@ -349,7 +435,7 @@ async def train_start() -> JSONResponse:
         backend = LiteLLMBackend(**llm_kwargs)
         target = cfg.build_connector()
     except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return _safe_error(exc, 400)
 
     task = asyncio.create_task(_run_training(cfg, backend, target))
     _state["training_task"] = task
@@ -514,7 +600,7 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
             backend = LiteLLMBackend(**llm_kwargs)
             target = extended_cfg.build_connector()
         except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
+            return _safe_error(exc, 400)
 
         task = asyncio.create_task(_run_training(extended_cfg, backend, target))
         _state["training_task"] = task
@@ -535,8 +621,7 @@ async def get_history() -> JSONResponse:
             json.loads(rr.model_dump_json()) for rr in history
         ])
     except Exception as exc:
-        logger.exception("Failed to load history")
-        return JSONResponse({"error": str(exc)}, status_code=500)
+        return _safe_error(exc, 500)
 
 
 # ---------------------------------------------------------------------------
@@ -743,7 +828,7 @@ async def _run_demo_training() -> None:
         logger.exception("Demo training failed")
         _state["training_status"] = "error"
         _state["error_message"] = str(exc)
-        _push_event({"type": "error", "message": str(exc)})
+        _push_event({"type": "error", "message": "Demo training error. Check server logs."})
 
 
 @app.post("/api/demo/start")

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,6 +21,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _CONFIG_FILENAME = "config_snapshot.json"
+
+# A safe branch / ref name: alphanumerics, hyphens, underscores, dots, slashes.
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9._/\-]+$")
 
 
 class GitTracker:
@@ -40,6 +44,29 @@ class GitTracker:
         self._git_available: bool | None = None  # lazily detected
 
     # ------------------------------------------------------------------
+    # Input validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_branch_name(name: str) -> None:
+        """Raise ``ValueError`` if *name* looks like a git injection attempt."""
+        if not name:
+            raise ValueError("Branch name must not be empty.")
+        if not _SAFE_NAME_RE.match(name):
+            raise ValueError(
+                f"Invalid branch name {name!r}: "
+                "only alphanumerics, hyphens, underscores, dots, and slashes allowed."
+            )
+        if name.startswith("-"):
+            raise ValueError(f"Branch name {name!r} must not start with a dash.")
+
+    @staticmethod
+    def _sanitize_message(msg: str) -> str:
+        """Strip control characters from a commit message."""
+        # Remove newlines and null bytes that could confuse git.
+        return msg.replace("\x00", "").replace("\n", " ").replace("\r", "")[:500]
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -51,6 +78,8 @@ class GitTracker:
         """
         if not self._should_run():
             return False
+
+        self._validate_branch_name(name)
 
         # Ensure there is a git repo.
         if not (self._project_dir / ".git").is_dir():
@@ -87,7 +116,7 @@ class GitTracker:
             encoding="utf-8",
         )
 
-        commit_msg = message or f"Round {round_num} config snapshot"
+        commit_msg = self._sanitize_message(message) or f"Round {round_num} config snapshot"
         self._run_git("add", _CONFIG_FILENAME)
         ok = self._run_git("commit", "-m", f"[round-{round_num}] {commit_msg}")
         if ok:
