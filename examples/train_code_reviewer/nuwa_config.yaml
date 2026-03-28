@@ -1,0 +1,48 @@
+# 女娲 Nuwa - 代码审查 Agent 训练配置
+# ===========================================
+# 本配置文件用于训练和优化一个代码审查（Code Review）Agent。
+# Nuwa 会自动评估 Agent 的审查质量，并持续改进其审查能力。
+
+# LLM 模型设置
+llm_model: "openai/gpt-4o"
+
+# 连接器设置
+# 此示例使用 HTTP 连接器连接到本地运行的代码审查 Agent
+connector_type: "http"
+
+connector_params:
+  url: "http://localhost:8080/review"      # 目标 Agent 的代码审查 API 端点
+  method: "POST"
+  input_field: "input"                      # 传入待审查的代码或 diff
+  output_field: "output"                    # Agent 返回的审查意见
+  timeout: 60                               # 代码审查可能需要更长时间
+
+# 训练方向
+# 针对代码审查场景的优化目标
+training_direction: >
+  优化代码审查 Agent 的审查质量和实用性。重点关注：
+  1) 能否准确识别代码中的 bug、安全漏洞和性能问题
+  2) 审查意见是否具体、可操作，而不是泛泛而谈
+  3) 是否能给出改进建议和示例代码
+  4) 是否能区分严重问题和风格建议，合理划分优先级
+  5) 审查语气是否专业且有建设性，避免过于苛刻
+
+# 训练参数
+max_rounds: 8
+samples_per_round: 20
+
+# 代码审查任务较复杂，使用较大的验证集
+train_val_split: 0.6
+
+# 代码审查的一致性要求较高
+overfitting_threshold: 0.12
+consistency_runs: 3
+consistency_threshold: 0.85
+
+# 回退容忍度较低，避免审查质量下降
+regression_tolerance: 0.03
+
+# 项目目录
+project_dir: ".nuwa"
+
+verbose: false

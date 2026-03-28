@@ -1,0 +1,355 @@
+<div align="center">
+
+# 女娲 Nuwa
+
+**AI Agent Trainer — 让智能体自动进化**
+
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![PyPI](https://img.shields.io/badge/PyPI-nuwa--trainer-orange?logo=pypi&logoColor=white)](https://pypi.org/project/nuwa-trainer/)
+
+[中文](#什么是女娲) | [English](#what-is-nuwa)
+
+</div>
+
+---
+
+## 什么是女娲
+
+女娲（Nuwa）是一个 **AI 智能体训练器**——一个用来优化其他 AI 智能体的元智能体。它通过自动化的数据集生成、执行评估、反思总结和提示词变异循环，持续优化目标智能体的 Prompt 与配置参数，无需人工反复调试。
+
+灵感来源于 [AutoResearch](https://github.com/autoresearch) 等自动化科研框架的理念：将"调优智能体"这件事本身交给智能体来完成。
+
+## What is Nuwa
+
+Nuwa is an **AI Agent Trainer** — a meta-agent that optimizes other AI agents. It automatically generates evaluation datasets, runs your agent, scores the outputs, reflects on failure patterns, and mutates prompts and configurations to improve performance. No more manual prompt engineering.
+
+Inspired by automated research frameworks: let an agent handle the work of tuning agents.
+
+## 核心特性 / Key Features
+
+- [x] **Closed-loop training / 闭环训练**
+  Dataset Gen → Execution → Evaluation → Reflection → Mutation → Validation
+- [x] **Multi-LLM support / 多模型支持**
+  OpenAI, Anthropic, Ollama, 以及任何 LiteLLM 兼容的模型提供商
+- [x] **Flexible connectors / 灵活连接器**
+  HTTP API、CLI 子进程、Python 函数调用——三种方式接入你的智能体
+- [x] **Guardrails / 安全护栏**
+  过拟合检测、回归预防、一致性校验，确保每一轮优化都是真实进步
+- [x] **Sandbox isolation / 沙箱隔离** *(NEW)*
+  训练全程在沙箱中运行，真实智能体的配置不会被修改，仅在人工审批后生效
+- [x] **Python SDK / 编程接口** *(NEW)*
+  `@nuwa.trainable` 装饰器 + `nuwa.train()` 一行代码启动训练，零配置文件集成
+- [x] **Web UI / 浏览器控制台** *(NEW)*
+  实时训练监控面板，SSE 推送，演示模式无需 API Key
+- [x] **Interactive CLI / 交互式命令行**
+  对话式引导配置，开箱即用
+- [x] **Full audit trail / 完整审计日志**
+  JSONL 日志 + 每轮配置快照，训练过程完全可追溯
+- [x] **Human-in-the-loop / 人机协同**
+  全自动训练，最终人工审批确认
+- [x] **Parallel evaluation / 并行评估** *(NEW)*
+  多智能体并行执行 + 多评委集成评分（Mean/Median/Weighted/Majority/Min），可配置并发度
+- [x] **Multi-objective optimization / 多目标优化** *(NEW)*
+  Pareto 前沿跟踪，支持安全性、准确性、友好度等多维度联合优化
+
+## 架构 / Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        女娲 Nuwa Training Loop                  │
+│                                                                 │
+│   ┌───────────┐    ┌───────────┐    ┌───────────┐              │
+│   │ 1. Dataset │───▶│ 2. Execute│───▶│ 3. Evaluate│             │
+│   │    Gen     │    │   Agent   │    │   Output  │              │
+│   └───────────┘    └───────────┘    └─────┬─────┘              │
+│         ▲                                 │                     │
+│         │                                 ▼                     │
+│   ┌───────────┐    ┌───────────┐    ┌───────────┐              │
+│   │ 6. Validate│◀──│ 5. Mutate │◀──│ 4. Reflect │              │
+│   │  & Accept │    │  Prompt   │    │  on Errors│              │
+│   └───────────┘    └───────────┘    └───────────┘              │
+│                                                                 │
+│   ╔═══════════════════════════════════════════════════════════╗ │
+│   ║  Guardrails: Overfitting ∙ Regression ∙ Consistency      ║ │
+│   ╚═══════════════════════════════════════════════════════════╝ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 快速开始 / Quick Start
+
+### 安装 / Install
+
+```bash
+pip install nuwa-trainer
+```
+
+### 交互模式 / Interactive Mode
+
+通过对话式引导完成配置并启动训练：
+
+```bash
+nuwa train
+```
+
+### 无头模式 / Headless Mode
+
+使用配置文件直接运行：
+
+```bash
+nuwa run --config config.yaml
+```
+
+### Python SDK（推荐）
+
+在你的智能体项目中直接集成：
+
+```python
+import nuwa
+
+# 标记你的智能体为可训练的
+@nuwa.trainable(name="客服Bot")
+def my_agent(user_input: str, config: dict | None = None) -> str:
+    prompt = config.get("system_prompt", "你是助手") if config else "你是助手"
+    return call_llm(prompt, user_input)  # 你的实际逻辑
+
+# 一行代码启动训练
+result = nuwa.train_sync(
+    my_agent,
+    direction="提升回答准确率和用户满意度",
+    model="openai/gpt-4o",
+    max_rounds=5,
+)
+
+# 查看结果并决定是否采纳
+print(f"最佳分数: {result.best_val_score:.3f}")
+```
+
+### 完整控制模式
+
+```python
+import asyncio
+import nuwa
+
+async def main():
+    trainer = nuwa.NuwaTrainer(
+        agent=my_agent,
+        direction="让回答更准确、更友好",
+        model="openai/gpt-4o",
+        max_rounds=5,
+        sandbox=True,  # 沙箱模式（默认开启，保护真实智能体）
+    )
+    result = await trainer.run()
+
+    if result.best_val_score > 0.8:
+        trainer.promote()   # 将优化配置应用到真实智能体
+    else:
+        trainer.discard()   # 丢弃更改，保留原始配置
+
+asyncio.run(main())
+```
+
+### Web UI 控制台
+
+启动浏览器训练面板（含演示模式）：
+
+```bash
+nuwa web  # 或 python -m nuwa.web.server
+```
+
+## 沙箱隔离 / Sandbox Isolation
+
+Nuwa 默认在沙箱中运行训练，确保你的智能体安全：
+
+```
+┌──────────────────────────────────────────────┐
+│  沙箱 (Sandbox)                               │
+│  ┌─────────────┐    ┌──────────────────────┐ │
+│  │ 配置副本     │───▶│  训练循环             │ │
+│  │ (deep copy) │◀──│  所有变异在此执行       │ │
+│  └─────────────┘    └──────────────────────┘ │
+└──────────────────────┬───────────────────────┘
+                       │ 人工审批通过后
+                       ▼
+┌──────────────────────────────────────────────┐
+│  真实智能体 (训练期间完全不受影响)              │
+│  promote() ──▶ 应用最佳配置                    │
+│  discard() ──▶ 保持原样                        │
+└──────────────────────────────────────────────┘
+```
+
+- 训练期间，真实智能体的 `apply_config()` **永远不会被调用**
+- 每次配置变更自动创建磁盘快照，可按版本号回滚
+- 进程崩溃后，快照支持恢复
+
+## 配置 / Configuration
+
+```yaml
+# config.yaml
+project:
+  name: my-customer-support-agent
+  description: "优化客服智能体的回答质量"
+  max_rounds: 10
+
+agent:
+  connector: http            # http | cli | python
+  endpoint: "http://localhost:8000/chat"
+  timeout: 30
+
+llm:
+  provider: openai           # openai | anthropic | ollama | litellm
+  model: gpt-4o
+  temperature: 0.7
+
+evaluation:
+  metrics:
+    - accuracy
+    - helpfulness
+    - safety
+  passing_threshold: 0.85
+
+guardrails:
+  overfit_detection: true
+  regression_prevention: true
+  consistency_check: true
+  holdout_ratio: 0.2         # 20% 数据用于过拟合检测
+```
+
+## 接入你的智能体 / Connecting Your Agent
+
+Nuwa 通过 **连接器（Connector）** 与你的智能体通信。支持三种方式：
+
+### HTTP API
+
+```yaml
+agent:
+  connector: http
+  endpoint: "http://localhost:8000/chat"
+  method: POST
+  headers:
+    Authorization: "Bearer ${AGENT_API_KEY}"
+  body_template: '{"message": "{{input}}"}'
+  response_path: "$.reply"
+```
+
+### CLI Subprocess
+
+```yaml
+agent:
+  connector: cli
+  command: "python my_agent.py --input '{{input}}'"
+  working_dir: ./agent
+```
+
+### Python Function
+
+```yaml
+agent:
+  connector: python
+  module: my_agent.core
+  function: run
+  # Nuwa will call: my_agent.core.run(input=...)
+```
+
+## 工作原理 / How It Works
+
+每一轮训练（Round）包含以下六个阶段：
+
+| Stage | 阶段 | Description |
+|-------|------|-------------|
+| **1. Dataset Gen** | 数据集生成 | LLM 根据目标智能体的描述和历史表现，生成多样化的测试用例 |
+| **2. Execute** | 执行 | 将测试用例发送给目标智能体，收集其输出 |
+| **3. Evaluate** | 评估 | LLM 评审员对输出进行多维度打分（准确性、有用性、安全性等） |
+| **4. Reflect** | 反思 | 分析失败案例，总结出具体的改进方向和模式 |
+| **5. Mutate** | 变异 | 基于反思结论，生成改进后的 Prompt / 配置参数候选方案 |
+| **6. Validate** | 验证 | 在留出集上验证改进是否真实有效，通过护栏检查后接受变更 |
+
+训练自动循环直至达到目标分数或最大轮次，最后由人工审批最终配置。
+
+## 安全护栏 / Guardrails
+
+Nuwa 内置三重保护机制，防止"虚假进步"：
+
+**Overfitting Detection / 过拟合检测**
+训练集和留出集（holdout set）分别评分。如果训练集分数提升但留出集分数下降，该轮变更会被拒绝。
+
+**Regression Prevention / 回归预防**
+每轮变更后，在之前所有通过的测试用例上重新运行。任何回归都会触发回滚。
+
+**Consistency Checking / 一致性校验**
+同一输入多次运行，检查输出的一致性。高方差的配置会被标记并降权。
+
+## 项目结构 / Project Structure
+
+```
+nuwa/
+├── core/                 # 数据模型、协议接口、异常
+├── llm/                  # LLM 后端 (LiteLLM)、元提示词、解析器
+├── connectors/           # 目标智能体连接器 (HTTP, CLI, Python)
+├── engine/               # 训练引擎
+│   ├── loop.py           # 主循环编排器
+│   ├── scheduler.py      # 收敛检测与早停
+│   ├── stages/           # 六阶段流水线
+│   ├── parallel/         # 并行执行与集成评估
+│   └── objectives/       # 多目标优化与 Pareto 前沿
+├── guardrails/           # 安全护栏 (过拟合/回退/一致性)
+├── sandbox/              # 沙箱隔离层
+│   ├── manager.py        # 沙箱会话管理
+│   ├── agent.py          # 沙箱化智能体包装器
+│   └── diff.py           # 配置差异对比
+├── sdk/                  # Python SDK
+│   ├── decorator.py      # @trainable 装饰器
+│   ├── trainer.py        # NuwaTrainer 高级 API
+│   └── quick.py          # train() 一行启动
+├── web/                  # Web UI (FastAPI + SSE)
+├── conversation/         # 交互式对话 UI (Rich)
+├── config/               # 配置管理 (YAML)
+├── persistence/          # 持久化 (JSONL + 快照 + Git)
+└── cli.py                # CLI 入口
+```
+
+## 开发 / Development
+
+```bash
+# 克隆仓库
+git clone https://github.com/your-org/nuwa.git
+cd nuwa
+
+# 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate
+
+# 安装开发依赖
+pip install -e ".[dev]"
+
+# 运行测试
+pytest
+
+# 代码检查
+ruff check .
+mypy nuwa/
+```
+
+## 路线图 / Roadmap
+
+- [x] **Web UI** — 浏览器端训练监控面板，实时查看训练进度与指标变化
+- [x] **Sandbox isolation** — 沙箱隔离，训练期间保护真实智能体
+- [x] **Python SDK** — `@trainable` + `train()` 编程接口
+- [x] **Multi-objective optimization** — Pareto 前沿跟踪，支持多目标联合优化（如安全性与有用性的平衡）
+- [x] **Parallel evaluation** — 多智能体并行评估 + 多评委集成评分，大幅加速训练循环
+- [ ] **Plugin system** — 可插拔的评估器、变异策略和连接器
+- [ ] **Benchmark suite** — 内置标准化评测集，方便横向对比
+
+## 许可证 / License
+
+[MIT License](LICENSE)
+
+---
+
+<div align="center">
+
+**女娲造人，Nuwa 造智能体。**
+
+*Built with care for the AI agent community.*
+
+</div>

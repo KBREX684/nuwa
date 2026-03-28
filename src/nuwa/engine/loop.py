@@ -1,0 +1,368 @@
+"""Main training loop orchestrator for the Nuwa AI Trainer."""
+
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any, Callable
+
+from nuwa.core.exceptions import GuardrailTriggered, TrainingAborted
+from nuwa.core.protocols import Guardrail, ModelBackend, Stage, TargetAgent
+from nuwa.core.types import (
+    LoopContext,
+    RoundResult,
+    TrainingConfig,
+    TrainingResult,
+)
+from nuwa.engine.parallel.evaluator import EnsembleStrategy, JudgeConfig
+from nuwa.engine.parallel.stage import (
+    ParallelEvaluationStage,
+    ParallelExecutionStage,
+    ParallelValidationStage,
+)
+from nuwa.engine.scheduler import TrainingScheduler
+from nuwa.engine.stages.dataset_gen import DatasetGenStage
+from nuwa.engine.stages.evaluation import EvaluationStage
+from nuwa.engine.stages.execution import ExecutionStage
+from nuwa.engine.stages.mutation import MutationStage
+from nuwa.engine.stages.reflection import ReflectionStage
+from nuwa.engine.stages.validation import ValidationStage
+from nuwa.sandbox.manager import SandboxManager
+
+logger = logging.getLogger(__name__)
+
+
+class TrainingLoop:
+    """Orchestrates the full train-eval-reflect-mutate-validate loop."""
+
+    def __init__(
+        self,
+        config: TrainingConfig,
+        backend: ModelBackend,
+        target: TargetAgent,
+        guardrails: list[Guardrail],
+        callbacks: list[Callable[..., Any]] | None = None,
+        sandbox: SandboxManager | None = None,
+        parallel_config: dict[str, Any] | None = None,
+    ) -> None:
+        self._config = config
+        self._backend = backend
+        self._target = target
+        self._guardrails = guardrails
+        self._callbacks = callbacks or []
+        self._sandbox = sandbox
+        self._scheduler = TrainingScheduler(config)
+
+        # Initialise the pipeline stages.
+        # When *parallel_config* is provided, swap the execution, evaluation,
+        # and validation stages for their high-throughput parallel variants.
+        #
+        # parallel_config format:
+        #   {
+        #       "max_concurrency": int (default 10),
+        #       "judges": list[JudgeConfig],
+        #       "strategy": str | EnsembleStrategy (default "mean"),
+        #   }
+        if parallel_config is not None:
+            stages = self._build_parallel_stages(parallel_config)
+            self._pre_validation_stages: list[Stage] = stages["pre_validation"]
+            self._validation_stage: Stage = stages["validation"]
+            logger.info(
+                "Parallel mode enabled (concurrency=%s, judges=%d, strategy=%s)",
+                parallel_config.get("max_concurrency", 10),
+                len(parallel_config.get("judges", [])),
+                parallel_config.get("strategy", "mean"),
+            )
+        else:
+            self._pre_validation_stages = [
+                DatasetGenStage(),
+                ExecutionStage(),
+                EvaluationStage(),
+                ReflectionStage(),
+                MutationStage(),
+            ]
+            self._validation_stage = ValidationStage()
+
+    # ------------------------------------------------------------------
+    # Public entry point
+    # ------------------------------------------------------------------
+
+    async def run(self) -> TrainingResult:
+        """Execute the full training run and return the result summary.
+
+        When a :class:`SandboxManager` is configured, the target agent is
+        automatically wrapped in a :class:`SandboxedAgent` so that **no
+        mutations reach the real agent** during training.  The caller (CLI /
+        UI) is responsible for calling ``sandbox.promote()`` or
+        ``sandbox.discard()`` after the run finishes.
+        """
+        start_time = time.monotonic()
+
+        # --- sandbox wrapping ------------------------------------------------
+        sandbox_session_id: str | None = None
+        if self._sandbox is not None:
+            sandboxed = await self._sandbox.enter()
+            sandbox_session_id = sandboxed.session_id
+            active_target: Any = sandboxed
+            logger.info(
+                "Sandbox mode enabled (session %s). "
+                "The real agent will NOT be modified during training.",
+                sandbox_session_id,
+            )
+        else:
+            active_target = self._target
+
+        context = LoopContext(
+            config=self._config,
+            backend_ref=self._backend,
+            target_ref=active_target,
+            round_num=0,
+            current_config=active_target.get_current_config(),
+            best_config=active_target.get_current_config(),
+            best_val_score=0.0,
+        )
+
+        stop_reason = "max_rounds reached"
+
+        for round_num in range(1, self._config.max_rounds + 1):
+            context.round_num = round_num
+            logger.info("===== Round %d / %d =====", round_num, self._config.max_rounds)
+
+            # Optionally adjust budget for this round.
+            budget = self._scheduler.get_round_budget(round_num)
+            context.config = self._config.model_copy(
+                update={"samples_per_round": budget["samples_per_round"]}
+            )
+
+            # Run pre-validation stages (dataset_gen, execution, evaluation, reflection, mutation).
+            try:
+                for stage in self._pre_validation_stages:
+                    logger.debug("Running stage: %s", stage.name)
+                    context = await stage.execute(context)
+            except (TrainingAborted, GuardrailTriggered) as exc:
+                stop_reason = f"aborted during stage: {exc}"
+                logger.warning("Training aborted in round %d: %s", round_num, exc)
+                break
+            except Exception:
+                logger.exception("Unhandled error in round %d", round_num)
+                raise
+
+            # If a mutation was proposed, apply it, run validation, then decide.
+            if context.proposed_mutation is not None:
+                saved_config = dict(context.current_config)
+                proposed_config = dict(context.proposed_mutation.proposed_config)
+
+                # Apply the proposed config to the active target for validation.
+                # In sandbox mode this mutates only the sandbox copy.
+                active_target.apply_config(proposed_config)
+                context.current_config = proposed_config
+
+                logger.info(
+                    "Round %d: applying proposed mutation for validation",
+                    round_num,
+                )
+
+                try:
+                    context = await self._validation_stage.execute(context)
+                except (TrainingAborted, GuardrailTriggered) as exc:
+                    stop_reason = f"aborted during validation: {exc}"
+                    logger.warning("Training aborted in round %d: %s", round_num, exc)
+                    # Rollback before breaking.
+                    active_target.apply_config(saved_config)
+                    context.current_config = saved_config
+                    break
+                except Exception:
+                    logger.exception("Unhandled error in validation round %d", round_num)
+                    raise
+
+                # If validation failed (score regressed), rollback.
+                val_mean = (
+                    context.val_scores.mean_score if context.val_scores else 0.0
+                )
+                regression = context.best_val_score - val_mean
+                if regression > self._config.regression_tolerance and context.best_val_score > 0.0:
+                    logger.warning(
+                        "Round %d: validation score %.3f regressed from best %.3f "
+                        "(tolerance=%.3f). Rolling back mutation.",
+                        round_num,
+                        val_mean,
+                        context.best_val_score,
+                        self._config.regression_tolerance,
+                    )
+                    active_target.apply_config(saved_config)
+                    context.current_config = saved_config
+                else:
+                    logger.info(
+                        "Round %d: validation passed (score=%.3f), keeping mutation.",
+                        round_num,
+                        val_mean,
+                    )
+            else:
+                # No mutation proposed; still run validation with current config.
+                try:
+                    context = await self._validation_stage.execute(context)
+                except (TrainingAborted, GuardrailTriggered) as exc:
+                    stop_reason = f"aborted during validation: {exc}"
+                    logger.warning("Training aborted in round %d: %s", round_num, exc)
+                    break
+                except Exception:
+                    logger.exception("Unhandled error in validation round %d", round_num)
+                    raise
+
+            # Build RoundResult for this round.
+            round_result = RoundResult(
+                round_num=round_num,
+                train_scores=context.train_scores,  # type: ignore[arg-type]
+                val_scores=context.val_scores,
+                reflection=context.reflection,  # type: ignore[arg-type]
+                mutation=context.proposed_mutation,
+                applied=context.proposed_mutation is not None,
+            )
+            context.history.append(round_result)
+
+            # Track best config / score.
+            val_mean = (
+                context.val_scores.mean_score if context.val_scores else 0.0
+            )
+            if val_mean > context.best_val_score:
+                context.best_val_score = val_mean
+                context.best_config = dict(context.current_config)
+                logger.info(
+                    "Round %d: new best val score %.3f", round_num, val_mean
+                )
+            else:
+                # Check for regression and rollback if needed.
+                logger.info(
+                    "Round %d: val score %.3f did not beat best %.3f",
+                    round_num,
+                    val_mean,
+                    context.best_val_score,
+                )
+
+            # Check guardrails.
+            should_halt, halt_reason = self._check_guardrails(context)
+            if should_halt:
+                stop_reason = halt_reason
+                logger.info("Guardrail triggered stop: %s", halt_reason)
+                break
+
+            # Check scheduler convergence.
+            converged, conv_reason = self._scheduler.should_stop(context)
+            if converged:
+                stop_reason = conv_reason
+                logger.info("Scheduler stop: %s", conv_reason)
+                break
+
+            # Fire callbacks for UI / monitoring.
+            self._fire_callbacks(round_result, context)
+
+        elapsed = time.monotonic() - start_time
+        return self._finalize(context, stop_reason, elapsed, sandbox_session_id)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_parallel_stages(
+        parallel_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Construct parallel stage instances from *parallel_config*.
+
+        Parameters
+        ----------
+        parallel_config:
+            Dictionary with keys ``max_concurrency`` (int), ``judges``
+            (list of :class:`JudgeConfig`), and ``strategy`` (str or
+            :class:`EnsembleStrategy`).
+
+        Returns
+        -------
+        dict
+            ``{"pre_validation": [...stages], "validation": stage}``
+        """
+        max_concurrency: int = parallel_config.get("max_concurrency", 10)
+        judges: list[JudgeConfig] = parallel_config.get("judges", [])
+        raw_strategy = parallel_config.get("strategy", "mean")
+
+        if isinstance(raw_strategy, str):
+            strategy = EnsembleStrategy(raw_strategy)
+        else:
+            strategy = raw_strategy
+
+        # If no judges were supplied, fall back to the default sequential
+        # evaluation stage but still use parallel execution.
+        if judges:
+            eval_stage: Stage = ParallelEvaluationStage(
+                judges=judges, strategy=strategy
+            )
+        else:
+            eval_stage = EvaluationStage()
+
+        pre_validation: list[Stage] = [
+            DatasetGenStage(),
+            ParallelExecutionStage(max_concurrency=max_concurrency),
+            eval_stage,
+            ReflectionStage(),
+            MutationStage(),
+        ]
+
+        validation: Stage = ParallelValidationStage(
+            judges=judges if judges else None,
+            max_concurrency=max_concurrency,
+        )
+
+        return {"pre_validation": pre_validation, "validation": validation}
+
+    def _check_guardrails(self, context: LoopContext) -> tuple[bool, str]:
+        """Run all guardrails and return (should_stop, reason)."""
+        for guardrail in self._guardrails:
+            try:
+                verdict = guardrail.check(context.history)
+                if verdict.should_stop:
+                    return True, (
+                        f"Guardrail '{verdict.guardrail_name}': {verdict.reason}"
+                    )
+                if not verdict.passed:
+                    logger.warning(
+                        "Guardrail '%s' flagged (non-fatal): %s",
+                        verdict.guardrail_name,
+                        verdict.reason,
+                    )
+            except Exception:
+                logger.exception("Guardrail '%s' raised an exception", guardrail.name)
+        return False, ""
+
+    def _finalize(
+        self,
+        context: LoopContext,
+        stop_reason: str,
+        elapsed_s: float,
+        sandbox_session_id: str | None = None,
+    ) -> TrainingResult:
+        """Build the final TrainingResult from accumulated context."""
+        best_round = 0
+        best_score = 0.0
+        for rr in context.history:
+            vs = rr.val_scores.mean_score if rr.val_scores else 0.0
+            if vs > best_score:
+                best_score = vs
+                best_round = rr.round_num
+
+        return TrainingResult(
+            rounds=context.history,
+            best_round=best_round,
+            best_val_score=best_score,
+            final_config=context.best_config,
+            stop_reason=stop_reason,
+            total_duration_s=round(elapsed_s, 2),
+            sandbox_session_id=sandbox_session_id,
+        )
+
+    def _fire_callbacks(self, round_result: RoundResult, context: LoopContext) -> None:
+        """Invoke all registered callbacks with the latest round result."""
+        for cb in self._callbacks:
+            try:
+                cb(round_result, context)
+            except Exception:
+                logger.exception("Callback %s raised an exception", cb)

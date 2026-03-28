@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>女娲 Nuwa — 智能体训练控制台</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap" rel="stylesheet">
+<style>
+/* === DESIGN TOKENS === */
+:root {
+  --bg-0: #0c0c0f;
+  --bg-1: #131318;
+  --bg-2: #1a1a22;
+  --bg-3: #22222e;
+  --bg-card: rgba(22,22,34,0.65);
+  --border: rgba(255,255,255,0.06);
+  --border-h: rgba(255,255,255,0.12);
+  --text-0: #f0ece4;
+  --text-1: #b8b4aa;
+  --text-2: #706d65;
+  --amber: #e8a84c;
+  --amber-dim: rgba(232,168,76,0.15);
+  --amber-glow: rgba(232,168,76,0.25);
+  --green: #5fcf80;
+  --green-dim: rgba(95,207,128,0.12);
+  --red: #e85c5c;
+  --red-dim: rgba(232,92,92,0.12);
+  --cyan: #5cb8cf;
+  --cyan-dim: rgba(92,184,207,0.12);
+  --purple: #a07ce8;
+  --radius: 10px;
+  --font-body: 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --font-display: 'Fraunces', serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg-0);
+  color: var(--text-0);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+/* Subtle noise */
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: 99999; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  opacity: 0.5;
+}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-h); border-radius: 3px; }
+
+/* === LAYOUT === */
+.shell { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+
+/* === NAV === */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(12,12,15,0.85);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px;
+}
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-weight: 900; font-size: 1.3rem;
+  letter-spacing: -0.02em; color: var(--amber);
+}
+.brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 8px var(--amber-glow); }
+.nav-tabs { display: flex; gap: 2px; }
+.nav-tab {
+  padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
+  cursor: pointer; transition: all 0.2s; color: var(--text-2); border: none; background: none;
+  font-family: var(--font-body);
+}
+.nav-tab:hover { color: var(--text-1); background: var(--bg-2); }
+.nav-tab.active { color: var(--amber); background: var(--amber-dim); }
+.nav-status {
+  font-family: var(--font-mono); font-size: 0.75rem;
+  padding: 4px 12px; border-radius: 20px;
+}
+.status-idle { color: var(--text-2); background: var(--bg-3); }
+.status-running { color: var(--green); background: var(--green-dim); animation: pulse 2s infinite; }
+.status-completed { color: var(--amber); background: var(--amber-dim); }
+.status-error { color: var(--red); background: var(--red-dim); }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
+/* === CARDS & FORMS === */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(8px);
+  padding: 24px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--border-h); }
+.card-title {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-2); margin-bottom: 16px;
+}
+label { display: block; font-size: 0.8rem; color: var(--text-1); margin-bottom: 6px; font-weight: 500; }
+input[type="text"], input[type="password"], input[type="number"], textarea, select {
+  width: 100%; padding: 10px 14px; border-radius: 8px;
+  background: var(--bg-1); border: 1px solid var(--border);
+  color: var(--text-0); font-family: var(--font-mono); font-size: 0.85rem;
+  transition: border-color 0.2s, box-shadow 0.2s; outline: none;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
+textarea { font-family: var(--font-body); resize: vertical; min-height: 80px; }
+select { cursor: pointer; }
+.range-wrap { display: flex; align-items: center; gap: 12px; }
+input[type="range"] {
+  flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px;
+  background: var(--bg-3); outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--amber); cursor: pointer; border: 2px solid var(--bg-1);
+}
+.range-val { font-family: var(--font-mono); font-size: 0.8rem; color: var(--amber); min-width: 36px; text-align: right; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 24px; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; border: none; font-family: var(--font-body);
+  transition: all 0.2s; white-space: nowrap;
+}
+.btn-primary { background: var(--amber); color: var(--bg-0); }
+.btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.btn-secondary { background: var(--bg-3); color: var(--text-1); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg-2); border-color: var(--border-h); }
+.btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(232,92,92,0.2); }
+.btn-danger:hover { background: rgba(232,92,92,0.2); }
+.btn-success { background: var(--green-dim); color: var(--green); border: 1px solid rgba(95,207,128,0.2); }
+.btn-success:hover { background: rgba(95,207,128,0.2); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+/* === STAGE PIPELINE === */
+.pipeline { display: flex; align-items: center; gap: 4px; overflow-x: auto; padding: 4px 0; }
+.pipe-stage {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 6px; font-size: 0.75rem; font-weight: 500;
+  background: var(--bg-2); color: var(--text-2); white-space: nowrap; transition: all 0.3s;
+  border: 1px solid transparent;
+}
+.pipe-stage.done { color: var(--green); background: var(--green-dim); border-color: rgba(95,207,128,0.15); }
+.pipe-stage.active { color: var(--amber); background: var(--amber-dim); border-color: rgba(232,168,76,0.2); animation: pulse 1.5s infinite; }
+.pipe-arrow { color: var(--text-2); font-size: 0.7rem; opacity: 0.4; }
+
+/* === METRIC BADGE === */
+.metric {
+  text-align: center; padding: 16px;
+  background: var(--bg-2); border-radius: var(--radius); border: 1px solid var(--border);
+}
+.metric-value { font-family: var(--font-mono); font-size: 1.8rem; font-weight: 700; line-height: 1; }
+.metric-label { font-size: 0.7rem; color: var(--text-2); margin-top: 6px; letter-spacing: 0.05em; }
+
+/* === LOG LIST === */
+.log-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.log-item {
+  display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px; border-radius: 6px;
+  font-size: 0.78rem; background: var(--bg-1); font-family: var(--font-mono);
+}
+.log-time { color: var(--text-2); white-space: nowrap; flex-shrink: 0; }
+.log-msg { color: var(--text-1); word-break: break-word; }
+
+/* === TABLE === */
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.data-table th {
+  text-align: left; padding: 10px 14px; font-size: 0.7rem; font-weight: 600;
+  color: var(--text-2); letter-spacing: 0.08em; text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text-1); }
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+.expand-row td { padding: 0; }
+.expand-content {
+  padding: 14px 20px; background: var(--bg-1); border-radius: 0 0 8px 8px;
+  font-size: 0.78rem; line-height: 1.7;
+}
+.expand-content h4 { font-size: 0.75rem; color: var(--amber); margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* === GUARDRAIL INDICATORS === */
+.guardrail {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  border-radius: 8px; font-size: 0.78rem; background: var(--bg-2);
+}
+.guardrail-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.guardrail-dot.ok { background: var(--green); box-shadow: 0 0 6px rgba(95,207,128,0.4); }
+.guardrail-dot.warn { background: var(--amber); box-shadow: 0 0 6px var(--amber-glow); }
+.guardrail-dot.fail { background: var(--red); box-shadow: 0 0 6px rgba(232,92,92,0.4); }
+
+/* === DIFF === */
+.diff-block {
+  font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.7;
+  background: var(--bg-1); border-radius: 8px; padding: 16px; overflow-x: auto;
+  border: 1px solid var(--border);
+}
+.diff-add { color: var(--green); }
+.diff-del { color: var(--red); text-decoration: line-through; opacity: 0.7; }
+
+/* === TRANSITIONS === */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+.section { padding: 32px 0 64px; }
+.section-header { margin-bottom: 24px; }
+.section-header h2 { font-family: var(--font-display); font-size: 1.6rem; font-weight: 900; letter-spacing: -0.02em; }
+.section-header p { color: var(--text-2); font-size: 0.85rem; margin-top: 4px; }
+
+/* === CHART === */
+.chart-wrap { width: 100%; border-radius: var(--radius); overflow: hidden; background: var(--bg-1); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<!-- ========================= ALPINE ROOT ========================= -->
+<div x-data="nuwa()" x-init="init()">
+
+<!-- NAV -->
+<nav>
+  <div class="shell nav-inner">
+    <div class="brand"><span class="brand-dot"></span> 女娲 Nuwa</div>
+    <div class="nav-tabs">
+      <button class="nav-tab" :class="{ active: view==='setup' }" @click="view='setup'">配置</button>
+      <button class="nav-tab" :class="{ active: view==='monitor' }" @click="view='monitor'">训练</button>
+      <button class="nav-tab" :class="{ active: view==='results' }" @click="view='results'" :disabled="!result">结果</button>
+    </div>
+    <span class="nav-status" :class="'status-'+status" x-text="statusLabel"></span>
+  </div>
+</nav>
+
+<!-- ====================== SETUP VIEW ====================== -->
+<div x-show="view==='setup'" x-transition class="shell section">
+  <div class="section-header">
+    <h2>训练配置</h2>
+    <p>设定大模型、目标智能体和训练参数</p>
+  </div>
+  <div class="grid-2" style="gap:20px; align-items:start;">
+    <!-- LEFT COL -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- LLM Config -->
+      <div class="card">
+        <div class="card-title">大模型设置</div>
+        <label>模型选择</label>
+        <select x-model="cfg.llm_model" style="margin-bottom:12px;">
+          <option value="openai/gpt-4o">OpenAI / GPT-4o</option>
+          <option value="anthropic/claude-sonnet-4-20250514">Anthropic / Claude Sonnet</option>
+          <option value="ollama/llama3">Ollama / Llama 3 (本地)</option>
+          <option value="custom">自定义...</option>
+        </select>
+        <template x-if="cfg.llm_model==='custom'">
+          <div style="margin-bottom:12px;">
+            <label>自定义模型标识</label>
+            <input type="text" x-model="cfg.llm_model_custom" placeholder="provider/model-name">
+          </div>
+        </template>
+        <label>API Key</label>
+        <input type="password" x-model="cfg.llm_api_key" placeholder="sk-..." style="margin-bottom:12px;">
+        <label>自定义 Base URL <span style="color:var(--text-2);font-weight:400;">(可选)</span></label>
+        <input type="text" x-model="cfg.llm_base_url" placeholder="https://api.example.com/v1">
+      </div>
+      <!-- Connector -->
+      <div class="card">
+        <div class="card-title">目标智能体连接</div>
+        <label>连接方式</label>
+        <select x-model="cfg.connector_type" style="margin-bottom:12px;">
+          <option value="http">HTTP API</option>
+          <option value="cli">CLI 命令行</option>
+          <option value="function">Python 函数</option>
+        </select>
+        <template x-if="cfg.connector_type==='http'">
+          <div>
+            <label>API 地址</label>
+            <input type="text" x-model="cfg.connector_params.url" placeholder="http://localhost:5000/chat" style="margin-bottom:8px;">
+            <div class="grid-2">
+              <div><label>输入字段名</label><input type="text" x-model="cfg.connector_params.input_field" placeholder="input"></div>
+              <div><label>输出字段名</label><input type="text" x-model="cfg.connector_params.output_field" placeholder="output"></div>
+            </div>
+          </div>
+        </template>
+        <template x-if="cfg.connector_type==='cli'">
+          <div>
+            <label>执行命令</label>
+            <input type="text" x-model="cfg.connector_params.command" placeholder="python my_agent.py">
+          </div>
+        </template>
+        <template x-if="cfg.connector_type==='function'">
+          <div>
+            <label>模块路径</label>
+            <input type="text" x-model="cfg.connector_params.module" placeholder="my_agent:run">
+          </div>
+        </template>
+      </div>
+    </div>
+    <!-- RIGHT COL -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- Training Direction -->
+      <div class="card">
+        <div class="card-title">训练目标</div>
+        <label>训练方向描述</label>
+        <textarea x-model="cfg.training_direction" rows="4" placeholder="描述你希望如何优化目标智能体，例如：提升客服机器人的回答准确率和用户满意度，遇到模糊问题时能主动确认需求..."></textarea>
+      </div>
+      <!-- Params -->
+      <div class="card">
+        <div class="card-title">训练参数</div>
+        <label>最大训练轮次</label>
+        <div class="range-wrap" style="margin-bottom:14px;">
+          <input type="range" min="1" max="20" x-model.number="cfg.max_rounds">
+          <span class="range-val" x-text="cfg.max_rounds"></span>
+        </div>
+        <label>每轮样本数</label>
+        <div class="range-wrap" style="margin-bottom:14px;">
+          <input type="range" min="5" max="50" step="5" x-model.number="cfg.samples_per_round">
+          <span class="range-val" x-text="cfg.samples_per_round"></span>
+        </div>
+        <label>训练/验证分割</label>
+        <div class="range-wrap">
+          <input type="range" min="0.5" max="0.9" step="0.05" x-model.number="cfg.train_val_split">
+          <span class="range-val" x-text="Math.round(cfg.train_val_split*100)+'%'"></span>
+        </div>
+      </div>
+      <!-- Guardrails -->
+      <div class="card">
+        <div class="card-title">安全护栏</div>
+        <div class="grid-3" style="gap:12px;">
+          <div>
+            <label>过拟合阈值</label>
+            <input type="number" x-model.number="cfg.overfitting_threshold" step="0.01" min="0.05" max="0.5">
+          </div>
+          <div>
+            <label>回退容忍度</label>
+            <input type="number" x-model.number="cfg.regression_tolerance" step="0.01" min="0.01" max="0.3">
+          </div>
+          <div>
+            <label>一致性阈值</label>
+            <input type="number" x-model.number="cfg.consistency_threshold" step="0.05" min="0.5" max="1.0">
+          </div>
+        </div>
+      </div>
+      <!-- Buttons -->
+      <div style="display:flex;gap:12px;">
+        <button class="btn btn-primary" style="flex:1;" @click="startTraining(false)" :disabled="status==='running' || !cfg.training_direction">开始训练</button>
+        <button class="btn btn-secondary" @click="startTraining(true)" :disabled="status==='running'">演示模式</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================== MONITOR VIEW ====================== -->
+<div x-show="view==='monitor'" x-transition class="shell section">
+  <div class="section-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+    <div>
+      <h2>训练监控</h2>
+      <p x-text="status==='running' ? '训练进行中...' : status==='completed' ? '训练已完成' : '等待启动'"></p>
+    </div>
+    <button class="btn btn-danger" @click="stopTraining()" :disabled="status!=='running'">停止训练</button>
+  </div>
+
+  <!-- Status Metrics Row -->
+  <div class="grid-3" style="gap:12px;margin-bottom:20px;">
+    <div class="metric">
+      <div class="metric-value" style="color:var(--amber);" x-text="currentRound + ' / ' + cfg.max_rounds">0 / 10</div>
+      <div class="metric-label">当前轮次</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value" style="color:var(--cyan);" x-text="currentStageLabel">等待中</div>
+      <div class="metric-label">当前阶段</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value" style="color:var(--text-1);" x-text="elapsedTime">00:00</div>
+      <div class="metric-label">运行时间</div>
+    </div>
+  </div>
+
+  <!-- Pipeline Stages -->
+  <div class="card" style="padding:14px 20px;margin-bottom:20px;">
+    <div class="pipeline">
+      <template x-for="(s, i) in stages" :key="s.id">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div class="pipe-stage" :class="{ done: s.status==='done', active: s.status==='active' }">
+            <span x-show="s.status==='done'" style="color:var(--green);">✓</span>
+            <span x-show="s.status==='active'" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber);"></span>
+            <span x-text="s.label"></span>
+          </div>
+          <span x-show="i < stages.length-1" class="pipe-arrow">→</span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="grid-2" style="gap:20px; align-items:start;">
+    <!-- LEFT: Chart + Guardrails -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- Score Chart -->
+      <div class="card" style="padding:16px;">
+        <div class="card-title">评分趋势</div>
+        <div id="scoreChart" class="chart-wrap" style="height:280px;"></div>
+      </div>
+      <!-- Guardrails -->
+      <div class="card">
+        <div class="card-title">护栏状态</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="guardrail">
+            <span class="guardrail-dot" :class="guardrails.overfitting"></span>
+            <span>过拟合检测</span>
+            <span style="margin-left:auto;font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);" x-text="'阈值 '+cfg.overfitting_threshold"></span>
+          </div>
+          <div class="guardrail">
+            <span class="guardrail-dot" :class="guardrails.regression"></span>
+            <span>性能回退检测</span>
+            <span style="margin-left:auto;font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);" x-text="'容忍 '+cfg.regression_tolerance"></span>
+          </div>
+          <div class="guardrail">
+            <span class="guardrail-dot" :class="guardrails.consistency"></span>
+            <span>一致性检测</span>
+            <span style="margin-left:auto;font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);" x-text="'阈值 '+cfg.consistency_threshold"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- RIGHT: Round Detail + Event Log -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- Round Detail -->
+      <div class="card">
+        <div class="card-title">当前轮次详情</div>
+        <template x-if="latestRound">
+          <div>
+            <div class="grid-2" style="gap:10px;margin-bottom:12px;">
+              <div class="metric" style="padding:10px;">
+                <div class="metric-value" style="font-size:1.2rem;color:var(--amber);" x-text="latestRound.train_score?.toFixed(3) ?? '—'"></div>
+                <div class="metric-label">训练分</div>
+              </div>
+              <div class="metric" style="padding:10px;">
+                <div class="metric-value" style="font-size:1.2rem;color:var(--cyan);" x-text="latestRound.val_score?.toFixed(3) ?? '—'"></div>
+                <div class="metric-label">验证分</div>
+              </div>
+            </div>
+            <template x-if="latestRound.reflection">
+              <div style="margin-bottom:10px;">
+                <label style="color:var(--amber);font-size:0.7rem;letter-spacing:0.08em;">反思诊断</label>
+                <p style="font-size:0.8rem;color:var(--text-1);line-height:1.7;" x-text="latestRound.reflection"></p>
+              </div>
+            </template>
+            <template x-if="latestRound.mutation">
+              <div>
+                <label style="color:var(--green);font-size:0.7rem;letter-spacing:0.08em;">提出变异</label>
+                <p style="font-size:0.8rem;color:var(--text-1);line-height:1.7;" x-text="latestRound.mutation"></p>
+              </div>
+            </template>
+          </div>
+        </template>
+        <template x-if="!latestRound">
+          <p style="color:var(--text-2);font-size:0.8rem;">等待第一轮完成...</p>
+        </template>
+      </div>
+      <!-- Event Log -->
+      <div class="card">
+        <div class="card-title">事件日志</div>
+        <div class="log-list">
+          <template x-for="(ev, i) in logs.slice().reverse()" :key="i">
+            <div class="log-item">
+              <span class="log-time" x-text="ev.time"></span>
+              <span class="log-msg" x-text="ev.msg"></span>
+            </div>
+          </template>
+          <div x-show="logs.length===0" style="color:var(--text-2);font-size:0.8rem;padding:8px;">暂无事件</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================== RESULTS VIEW ====================== -->
+<div x-show="view==='results'" x-transition class="shell section">
+  <div class="section-header">
+    <h2>训练结果</h2>
+    <p>审核优化成果，决定是否采纳</p>
+  </div>
+
+  <template x-if="result">
+    <div>
+      <!-- Summary Metrics -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+        <div class="metric">
+          <div class="metric-value" style="color:var(--amber);" x-text="result.rounds?.length ?? 0"></div>
+          <div class="metric-label">总训练轮次</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="color:var(--green);" x-text="result.best_round ?? '—'"></div>
+          <div class="metric-label">最佳轮次</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="color:var(--cyan);" x-text="(result.best_val_score ?? 0).toFixed(3)"></div>
+          <div class="metric-label">最佳验证分</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="font-size:0.9rem;color:var(--text-1);" x-text="result.stop_reason ?? '—'"></div>
+          <div class="metric-label">停止原因</div>
+        </div>
+      </div>
+
+      <!-- Full Chart -->
+      <div class="card" style="padding:16px;margin-bottom:20px;">
+        <div class="card-title">完整评分趋势</div>
+        <div id="resultChart" class="chart-wrap" style="height:300px;"></div>
+      </div>
+
+      <!-- Rounds Table -->
+      <div class="card" style="margin-bottom:20px;padding:0;overflow:hidden;">
+        <div class="card-title" style="padding:20px 20px 12px;">轮次详情</div>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>轮次</th><th>训练分</th><th>验证分</th><th>差值</th><th>已采纳</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(r, i) in result.rounds" :key="i">
+                <tr>
+                  <td style="font-family:var(--font-mono);" x-text="'R'+(i+1)"></td>
+                  <td style="font-family:var(--font-mono);" x-text="r.train_score?.toFixed(3) ?? '—'"></td>
+                  <td style="font-family:var(--font-mono);" x-text="r.val_score?.toFixed(3) ?? '—'"></td>
+                  <td style="font-family:var(--font-mono);">
+                    <span :style="{ color: (r.train_score - (r.val_score||0)) > cfg.overfitting_threshold ? 'var(--red)' : 'var(--text-2)' }"
+                          x-text="((r.train_score||0) - (r.val_score||0)).toFixed(3)"></span>
+                  </td>
+                  <td><span :style="{ color: r.applied ? 'var(--green)' : 'var(--text-2)' }" x-text="r.applied ? '✓' : '✗'"></span></td>
+                  <td>
+                    <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.7rem;" @click="expandedRound = expandedRound===i ? null : i">
+                      <span x-text="expandedRound===i ? '收起' : '展开'"></span>
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <!-- Expanded Detail -->
+        <template x-if="expandedRound !== null && result.rounds[expandedRound]">
+          <div class="expand-content">
+            <h4>反思诊断</h4>
+            <p style="color:var(--text-1);" x-text="result.rounds[expandedRound].reflection || '无'"></p>
+            <h4>提出变异</h4>
+            <p style="color:var(--text-1);" x-text="result.rounds[expandedRound].mutation || '无'"></p>
+            <template x-if="result.rounds[expandedRound].failure_patterns?.length">
+              <div>
+                <h4>失败模式</h4>
+                <ul style="color:var(--text-1);padding-left:16px;">
+                  <template x-for="fp in result.rounds[expandedRound].failure_patterns" :key="fp">
+                    <li x-text="fp" style="margin-bottom:2px;"></li>
+                  </template>
+                </ul>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- Config Diff -->
+      <div class="card" style="margin-bottom:20px;" x-show="result.config_diff">
+        <div class="card-title">配置变更对比</div>
+        <div class="diff-block" x-html="renderDiff(result.original_config, result.final_config)"></div>
+      </div>
+
+      <!-- Approval Buttons -->
+      <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-success" style="flex:1;min-width:160px;" @click="approve('accept')">采纳优化结果</button>
+        <button class="btn btn-danger" style="flex:1;min-width:160px;" @click="approve('reject')">拒绝并回滚</button>
+        <div style="flex:1;min-width:240px;display:flex;gap:8px;align-items:center;">
+          <input type="number" x-model.number="extraRounds" min="1" max="20" style="width:70px;text-align:center;" value="3">
+          <button class="btn btn-secondary" style="flex:1;" @click="approve('extend')">追加训练</button>
+        </div>
+      </div>
+    </div>
+  </template>
+  <template x-if="!result">
+    <div class="card" style="text-align:center;padding:60px;">
+      <p style="color:var(--text-2);font-size:1rem;">暂无训练结果</p>
+      <p style="color:var(--text-2);font-size:0.8rem;margin-top:8px;">完成一次训练后，结果将显示在此处</p>
+    </div>
+  </template>
+</div>
+
+</div><!-- end alpine root -->
+
+<!-- ========================= ALPINE LOGIC ========================= -->
+<script>
+function nuwa() {
+  return {
+    /* --- state --- */
+    view: 'setup',
+    status: 'idle',
+    cfg: {
+      llm_model: 'openai/gpt-4o',
+      llm_model_custom: '',
+      llm_api_key: '',
+      llm_base_url: '',
+      connector_type: 'http',
+      connector_params: { url: '', input_field: 'input', output_field: 'output', command: '', module: '' },
+      training_direction: '',
+      max_rounds: 5,
+      samples_per_round: 20,
+      train_val_split: 0.7,
+      overfitting_threshold: 0.15,
+      regression_tolerance: 0.05,
+      consistency_threshold: 0.8,
+    },
+    stages: [
+      { id: 'dataset_gen', label: '数据集生成', status: 'pending' },
+      { id: 'execution', label: '执行', status: 'pending' },
+      { id: 'evaluation', label: '评估', status: 'pending' },
+      { id: 'reflection', label: '反思', status: 'pending' },
+      { id: 'mutation', label: '变异', status: 'pending' },
+      { id: 'validation', label: '验证', status: 'pending' },
+    ],
+    currentRound: 0,
+    currentStage: '',
+    logs: [],
+    roundScores: [],
+    latestRound: null,
+    result: null,
+    expandedRound: null,
+    extraRounds: 3,
+    guardrails: { overfitting: 'ok', regression: 'ok', consistency: 'ok' },
+    scoreChart: null,
+    resultChart: null,
+    eventSource: null,
+    timerInterval: null,
+    startTime: null,
+    elapsedTime: '00:00',
+
+    /* --- computed --- */
+    get statusLabel() {
+      return { idle: '待机', running: '训练中', completed: '已完成', error: '出错' }[this.status] || this.status;
+    },
+    get currentStageLabel() {
+      const s = this.stages.find(s => s.status === 'active');
+      return s ? s.label : (this.status === 'completed' ? '完成' : '等待中');
+    },
+
+    /* --- lifecycle --- */
+    init() {
+      this.$nextTick(() => {
+        this.initCharts();
+      });
+      // Check server status
+      fetch('/api/status').then(r => r.json()).then(d => {
+        if (d.training_status) this.status = d.training_status;
+        if (d.training_status === 'running') { this.view = 'monitor'; this.connectSSE(); this.startTimer(); }
+      }).catch(() => {});
+    },
+
+    initCharts() {
+      const el = document.getElementById('scoreChart');
+      if (el && !this.scoreChart) {
+        this.scoreChart = echarts.init(el, null, { renderer: 'svg' });
+        this.updateScoreChart();
+      }
+    },
+
+    initResultChart() {
+      this.$nextTick(() => {
+        const el = document.getElementById('resultChart');
+        if (el) {
+          if (this.resultChart) this.resultChart.dispose();
+          this.resultChart = echarts.init(el, null, { renderer: 'svg' });
+          this.updateResultChart();
+        }
+      });
+    },
+
+    /* --- chart options factory --- */
+    chartOpts(data, showArea) {
+      const rounds = data.map((_, i) => 'R' + (i + 1));
+      const train = data.map(d => d.train);
+      const val = data.map(d => d.val);
+      return {
+        backgroundColor: 'transparent',
+        grid: { left: 50, right: 20, top: 20, bottom: 30 },
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: 'rgba(12,12,15,0.9)', borderColor: 'rgba(255,255,255,0.1)',
+          textStyle: { color: '#f0ece4', fontFamily: 'DM Mono', fontSize: 12 },
+          formatter: params => params.map(p => `<span style="color:${p.color}">●</span> ${p.seriesName}: ${p.value?.toFixed(3) ?? '—'}`).join('<br>')
+        },
+        xAxis: { type: 'category', data: rounds, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } }, axisLabel: { color: '#706d65', fontFamily: 'DM Mono', fontSize: 11 } },
+        yAxis: { type: 'value', min: 0, max: 1, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } }, axisLabel: { color: '#706d65', fontFamily: 'DM Mono', fontSize: 11 } },
+        series: [
+          { name: '训练分', type: 'line', data: train, smooth: true, symbol: 'circle', symbolSize: 6,
+            lineStyle: { color: '#e8a84c', width: 2 }, itemStyle: { color: '#e8a84c' },
+            areaStyle: showArea ? { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(232,168,76,0.15)' }, { offset: 1, color: 'rgba(232,168,76,0)' }] } } : undefined },
+          { name: '验证分', type: 'line', data: val, smooth: true, symbol: 'circle', symbolSize: 6,
+            lineStyle: { color: '#5cb8cf', width: 2 }, itemStyle: { color: '#5cb8cf' },
+            areaStyle: showArea ? { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(92,184,207,0.12)' }, { offset: 1, color: 'rgba(92,184,207,0)' }] } } : undefined }
+        ]
+      };
+    },
+
+    updateScoreChart() {
+      if (!this.scoreChart) return;
+      this.scoreChart.setOption(this.chartOpts(this.roundScores, false));
+    },
+
+    updateResultChart() {
+      if (!this.resultChart || !this.result?.rounds) return;
+      const data = this.result.rounds.map(r => ({ train: r.train_score, val: r.val_score }));
+      this.resultChart.setOption(this.chartOpts(data, true));
+    },
+
+    /* --- API calls --- */
+    async startTraining(demo) {
+      if (this.status === 'running') return;
+      this.resetState();
+      this.status = 'running';
+      this.view = 'monitor';
+      this.startTimer();
+
+      if (!demo) {
+        const model = this.cfg.llm_model === 'custom' ? this.cfg.llm_model_custom : this.cfg.llm_model;
+        const body = {
+          llm_model: model,
+          llm_api_key: this.cfg.llm_api_key || null,
+          llm_base_url: this.cfg.llm_base_url || null,
+          connector_type: this.cfg.connector_type,
+          connector_params: this.cfg.connector_params,
+          training_direction: this.cfg.training_direction,
+          max_rounds: this.cfg.max_rounds,
+          samples_per_round: this.cfg.samples_per_round,
+          train_val_split: this.cfg.train_val_split,
+          overfitting_threshold: this.cfg.overfitting_threshold,
+          regression_tolerance: this.cfg.regression_tolerance,
+          consistency_threshold: this.cfg.consistency_threshold,
+        };
+        try {
+          await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          await fetch('/api/train/start', { method: 'POST' });
+        } catch (e) {
+          this.addLog('配置或启动失败: ' + e.message);
+          this.status = 'error';
+          this.stopTimer();
+          return;
+        }
+      } else {
+        try {
+          await fetch('/api/demo/start', { method: 'POST' });
+        } catch (e) {
+          this.addLog('演示启动失败: ' + e.message);
+          this.status = 'error';
+          this.stopTimer();
+          return;
+        }
+      }
+      this.$nextTick(() => this.initCharts());
+      this.connectSSE();
+    },
+
+    async stopTraining() {
+      try { await fetch('/api/train/stop', { method: 'POST' }); } catch (e) {}
+      this.addLog('已请求停止训练');
+    },
+
+    async approve(decision) {
+      const body = { decision, extra_rounds: this.extraRounds };
+      try {
+        const r = await fetch('/api/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const d = await r.json();
+        if (decision === 'accept') { this.addLog('已采纳优化结果'); alert('优化结果已采纳并保存！'); }
+        else if (decision === 'reject') { this.addLog('已拒绝优化结果'); this.result = null; this.view = 'setup'; }
+        else if (decision === 'extend') { this.addLog('追加 ' + this.extraRounds + ' 轮训练'); this.view = 'monitor'; }
+      } catch (e) { this.addLog('操作失败: ' + e.message); }
+    },
+
+    /* --- SSE --- */
+    connectSSE() {
+      if (this.eventSource) this.eventSource.close();
+      this.eventSource = new EventSource('/api/train/events');
+      this.eventSource.onmessage = (e) => {
+        if (e.data === ':ping') return;
+        try {
+          const ev = JSON.parse(e.data);
+          this.handleEvent(ev);
+        } catch (err) {}
+      };
+      this.eventSource.onerror = () => {
+        // Will auto-reconnect
+      };
+    },
+
+    handleEvent(ev) {
+      const stageNames = { dataset_gen: '数据集生成', execution: '执行', evaluation: '评估', reflection: '反思', mutation: '变异', validation: '验证' };
+      switch (ev.type) {
+        case 'round_start':
+          this.currentRound = ev.round;
+          this.cfg.max_rounds = ev.max_rounds || this.cfg.max_rounds;
+          this.stages.forEach(s => s.status = 'pending');
+          this.addLog(`轮次 ${ev.round} 开始`);
+          break;
+        case 'stage':
+          this.currentStage = ev.stage;
+          this.stages.forEach(s => {
+            if (s.id === ev.stage) s.status = 'active';
+            else if (s.status === 'active') s.status = 'done';
+          });
+          this.addLog(`阶段: ${stageNames[ev.stage] || ev.stage}`);
+          break;
+        case 'round_end':
+          this.stages.forEach(s => { if (s.status !== 'pending') s.status = 'done'; });
+          this.roundScores.push({ train: ev.train_score, val: ev.val_score });
+          this.latestRound = ev;
+          this.updateScoreChart();
+          // Guardrail status heuristic
+          const gap = (ev.train_score || 0) - (ev.val_score || 0);
+          this.guardrails.overfitting = gap > this.cfg.overfitting_threshold ? 'fail' : gap > this.cfg.overfitting_threshold * 0.7 ? 'warn' : 'ok';
+          if (this.roundScores.length > 1) {
+            const prev = this.roundScores[this.roundScores.length - 2].val || 0;
+            const curr = ev.val_score || 0;
+            const best = Math.max(...this.roundScores.map(r => r.val || 0));
+            this.guardrails.regression = curr < best - this.cfg.regression_tolerance ? 'fail' : curr < best - this.cfg.regression_tolerance * 0.5 ? 'warn' : 'ok';
+          }
+          this.addLog(`轮次 ${ev.round} 完成 — 训练: ${(ev.train_score||0).toFixed(3)}  验证: ${(ev.val_score||0).toFixed(3)}  ${ev.applied ? '✓已应用' : '✗已回滚'}`);
+          break;
+        case 'training_complete':
+          this.status = 'completed';
+          this.stopTimer();
+          this.addLog(`训练完成 — 最佳轮次: ${ev.best_round}  最佳分: ${(ev.best_score||0).toFixed(3)}  原因: ${ev.stop_reason}`);
+          this.fetchResults();
+          if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
+          break;
+        case 'error':
+          this.status = 'error';
+          this.stopTimer();
+          this.addLog('错误: ' + ev.message);
+          if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
+          break;
+      }
+    },
+
+    async fetchResults() {
+      try {
+        // Fetch both endpoints in parallel
+        const [resMain, resRounds] = await Promise.all([
+          fetch('/api/results').then(r => r.json()).catch(() => null),
+          fetch('/api/results/rounds').then(r => r.json()).catch(() => []),
+        ]);
+        // Prefer /api/results/rounds for per-round scores (properly extracted)
+        const rounds = Array.isArray(resRounds) && resRounds.length ? resRounds : [];
+        if (rounds.length || (resMain && resMain.rounds)) {
+          const bestIdx = rounds.reduce((b, r, i) => (r.val_score || 0) > (rounds[b]?.val_score || 0) ? i : b, 0);
+          this.result = {
+            rounds: rounds,
+            best_round: resMain?.best_round ?? (bestIdx + 1),
+            best_val_score: resMain?.best_val_score ?? Math.max(...rounds.map(r => r.val_score || 0)),
+            stop_reason: resMain?.stop_reason ?? 'completed',
+            original_config: rounds[0]?.original_config ?? resMain?.final_config,
+            final_config: resMain?.final_config ?? rounds[rounds.length - 1]?.final_config,
+            config_diff: true,
+          };
+          this.view = 'results';
+          this.$nextTick(() => this.initResultChart());
+        }
+      } catch (e) { /* silently ignore */ }
+    },
+
+    /* --- helpers --- */
+    resetState() {
+      this.currentRound = 0;
+      this.currentStage = '';
+      this.logs = [];
+      this.roundScores = [];
+      this.latestRound = null;
+      this.result = null;
+      this.expandedRound = null;
+      this.guardrails = { overfitting: 'ok', regression: 'ok', consistency: 'ok' };
+      this.stages.forEach(s => s.status = 'pending');
+      if (this.scoreChart) this.scoreChart.clear();
+    },
+
+    addLog(msg) {
+      const now = new Date();
+      const time = now.toLocaleTimeString('zh-CN', { hour12: false });
+      this.logs.push({ time, msg });
+      if (this.logs.length > 200) this.logs.splice(0, this.logs.length - 200);
+    },
+
+    startTimer() {
+      this.startTime = Date.now();
+      this.timerInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - this.startTime) / 1000);
+        const m = Math.floor(s / 60);
+        this.elapsedTime = String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+      }, 1000);
+    },
+
+    stopTimer() {
+      if (this.timerInterval) { clearInterval(this.timerInterval); this.timerInterval = null; }
+    },
+
+    renderDiff(orig, final) {
+      if (!orig || !final) return '<span style="color:var(--text-2);">无配置变更数据</span>';
+      const origStr = typeof orig === 'string' ? orig : JSON.stringify(orig, null, 2);
+      const finalStr = typeof final === 'string' ? final : JSON.stringify(final, null, 2);
+      const origLines = origStr.split('\n');
+      const finalLines = finalStr.split('\n');
+      let html = '';
+      const maxLen = Math.max(origLines.length, finalLines.length);
+      for (let i = 0; i < maxLen; i++) {
+        const o = origLines[i] ?? '';
+        const f = finalLines[i] ?? '';
+        if (o === f) {
+          html += `<div style="color:var(--text-2);">&nbsp; ${this.esc(f)}</div>`;
+        } else {
+          if (o) html += `<div class="diff-del">- ${this.esc(o)}</div>`;
+          if (f) html += `<div class="diff-add">+ ${this.esc(f)}</div>`;
+        }
+      }
+      return html || '<span style="color:var(--text-2);">配置未变更</span>';
+    },
+
+    esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+  };
+}
+
+/* Resize charts on window resize */
+window.addEventListener('resize', () => {
+  document.querySelectorAll('[_echarts_instance_]').forEach(el => {
+    const c = echarts.getInstanceByDom(el);
+    if (c) c.resize();
+  });
+});
+</script>
+</body>
+</html>

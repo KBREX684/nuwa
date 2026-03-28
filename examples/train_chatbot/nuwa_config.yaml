@@ -1,0 +1,57 @@
+# 女娲 Nuwa - 客服聊天机器人训练配置
+# ===========================================
+# 本配置文件用于训练和优化一个客服聊天机器人 Agent。
+# Nuwa 会自动评估、反思并改进 Agent 的回答质量。
+
+# LLM 模型设置
+# 格式: 提供商/模型名称（通过 LiteLLM 统一调用）
+llm_model: "openai/gpt-4o"
+
+# 连接器设置
+# 指定如何与目标 Agent 通信
+# 支持的类型: http（HTTP API）、cli（命令行）、function（Python 函数）
+connector_type: "http"
+
+# 连接器参数
+# 对于 http 类型，需要提供目标 Agent 的 API 地址
+connector_params:
+  url: "http://localhost:5000/chat"       # 目标 Agent 的聊天 API 端点
+  method: "POST"                           # HTTP 方法
+  input_field: "input"                     # 请求体中输入字段的名称
+  output_field: "output"                   # 响应体中输出字段的名称
+  timeout: 30                              # 请求超时时间（秒）
+
+# 训练方向
+# 用自然语言描述你希望如何优化 Agent，Nuwa 会根据此方向生成评估和改进方案
+training_direction: "优化客服聊天机器人的回答质量，使其更准确、更友好、更有帮助。重点关注：1) 回答的准确性和相关性 2) 语气的友好程度 3) 是否提供了有用的解决方案 4) 对于无法解决的问题是否正确引导用户"
+
+# 训练轮次上限
+# 每一轮包含：生成评估样本 -> 运行 Agent -> 评分 -> 反思 -> 变异优化
+max_rounds: 5
+
+# 每轮评估样本数量
+samples_per_round: 15
+
+# 训练集/验证集划分比例
+# 0.7 表示 70% 用于训练评估，30% 用于验证（检测过拟合）
+train_val_split: 0.7
+
+# 过拟合阈值
+# 训练分数与验证分数的差距超过此值时，触发过拟合警告
+overfitting_threshold: 0.15
+
+# 一致性检查
+# 重复运行次数和一致性阈值，用于确保 Agent 的回答稳定可靠
+consistency_runs: 3
+consistency_threshold: 0.8
+
+# 回退容忍度
+# 如果新一轮的分数比上一轮下降超过此值，将回退到之前的配置
+regression_tolerance: 0.05
+
+# 项目目录
+# Nuwa 会在此目录下保存运行日志、配置快照等文件
+project_dir: ".nuwa"
+
+# 详细输出模式
+verbose: false
