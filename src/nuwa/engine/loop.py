@@ -105,8 +105,9 @@ class TrainingLoop:
         When a :class:`SandboxManager` is configured, the target agent is
         automatically wrapped in a :class:`SandboxedAgent` so that **no
         mutations reach the real agent** during training.  The caller (CLI /
-        UI) is responsible for calling ``sandbox.promote()`` or
-        ``sandbox.discard()`` after the run finishes.
+        UI / SDK) is responsible for applying a final decision after the run
+        (e.g. by calling ``SandboxManager.promote_session(result.sandbox_session_id)`` or
+        ``SandboxManager.discard_session(result.sandbox_session_id)``).
         """
         start_time = time.monotonic()
 
@@ -526,7 +527,7 @@ class TrainingLoop:
         )
 
     def _fire_callbacks(self, round_result: RoundResult, context: LoopContext) -> None:
-        """Invoke all registered callbacks with the latest round result."""
+        """Invoke all registered callbacks as ``cb(round_result, context)``."""
         for cb in self._callbacks:
             try:
                 cb(round_result, context)

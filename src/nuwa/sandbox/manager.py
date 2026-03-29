@@ -45,15 +45,8 @@ class SandboxManager:
     # Public API
     # ------------------------------------------------------------------
 
-    async def enter(self) -> SandboxedAgent:
-        """Create a sandboxed copy of the target agent.
-
-        Snapshots the current config and returns a :class:`SandboxedAgent`
-        wrapper that satisfies the ``TargetAgent`` protocol.
-
-        Returns:
-            A new :class:`SandboxedAgent` ready for training.
-        """
+    def enter_sync(self) -> SandboxedAgent:
+        """Create a sandboxed copy of the target agent (sync variant)."""
         session_id = uuid.uuid4().hex[:12]
         original_config = self._real_agent.get_current_config()
         snapshot_dir = self._project_dir / "sandbox" / session_id
@@ -75,7 +68,14 @@ class SandboxManager:
         )
         return sandboxed
 
-    async def promote(self, sandboxed: SandboxedAgent) -> dict[str, Any]:
+    async def enter(self) -> SandboxedAgent:
+        """Create a sandboxed copy of the target agent.
+
+        Async wrapper kept for backward compatibility.
+        """
+        return self.enter_sync()
+
+    def promote_sync(self, sandboxed: SandboxedAgent) -> dict[str, Any]:
         """Apply the sandbox's current config to the real agent.
 
         This is the **only** code path through which changes reach the real
@@ -106,7 +106,11 @@ class SandboxManager:
         )
         return promoted_config
 
-    async def discard(self, sandboxed: SandboxedAgent) -> dict[str, Any]:
+    async def promote(self, sandboxed: SandboxedAgent) -> dict[str, Any]:
+        """Async wrapper kept for backward compatibility."""
+        return self.promote_sync(sandboxed)
+
+    def discard_sync(self, sandboxed: SandboxedAgent) -> dict[str, Any]:
         """Discard all sandbox changes and return the original config.
 
         The real agent is **not** modified (it was never touched in the first
@@ -131,6 +135,30 @@ class SandboxManager:
             sandboxed.mutation_count,
         )
         return original
+
+    async def discard(self, sandboxed: SandboxedAgent) -> dict[str, Any]:
+        """Async wrapper kept for backward compatibility."""
+        return self.discard_sync(sandboxed)
+
+    def get_session(self, session_id: str) -> SandboxedAgent | None:
+        """Return a tracked sandbox session by id, or ``None`` when missing."""
+        return self._sessions.get(session_id)
+
+    def promote_session(
+        self,
+        session_id: str,
+        config_override: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Promote a session by id, optionally overriding config first."""
+        sandboxed = self._require_session(session_id)
+        if config_override is not None:
+            sandboxed.apply_config(config_override)
+        return self.promote_sync(sandboxed)
+
+    def discard_session(self, session_id: str) -> dict[str, Any]:
+        """Discard a session by id and return its original config."""
+        sandboxed = self._require_session(session_id)
+        return self.discard_sync(sandboxed)
 
     def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Return all config snapshots taken across active sandbox sessions.
@@ -165,6 +193,16 @@ class SandboxManager:
                 f"Unknown sandbox session {sandboxed.session_id!r}. "
                 "Was it created by this SandboxManager?"
             )
+
+    def _require_session(self, session_id: str) -> SandboxedAgent:
+        """Return a tracked session or raise ``ValueError``."""
+        sandboxed = self._sessions.get(session_id)
+        if sandboxed is None:
+            raise ValueError(
+                f"Unknown sandbox session {session_id!r}. "
+                "Was it created by this SandboxManager?"
+            )
+        return sandboxed
 
     def _write_session_metadata(
         self,

@@ -277,8 +277,19 @@ class NuwaTrainer:
         if not best:
             raise RuntimeError("No best config was recorded during training.")
 
+        if self._sandbox_manager is not None and self._result.sandbox_session_id:
+            promoted = self._sandbox_manager.promote_session(
+                self._result.sandbox_session_id,
+                config_override=best,
+            )
+            logger.info(
+                "Promoted best config via sandbox session %s.",
+                self._result.sandbox_session_id,
+            )
+            return dict(promoted)
+
         self._target.apply_config(best)
-        logger.info("Promoted best config to agent: %s", best)
+        logger.info("Promoted best config to agent directly: %s", best)
         return dict(best)
 
     def discard(self) -> dict[str, Any]:
@@ -289,6 +300,13 @@ class NuwaTrainer:
         dict
             The original configuration dict that was restored.
         """
+        session_id = self._result.sandbox_session_id if self._result is not None else None
+        if self._sandbox_manager is not None and session_id:
+            original = self._sandbox_manager.discard_session(session_id)
+            self._target.apply_config(copy.deepcopy(original))
+            logger.info("Discarded sandbox session %s and restored original config.", session_id)
+            return dict(original)
+
         self._target.apply_config(copy.deepcopy(self._original_config))
         logger.info("Discarded training changes; restored original config.")
         return dict(self._original_config)

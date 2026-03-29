@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-03-29
+
+### Fixed
+
+- **P0 callback contract mismatch**: `RunningPhase.build_callback()` now matches `TrainingLoop` callback signature (`cb(round_result, context)`), fixing interactive CLI progress callback breakage.
+- **P0 sandbox lifecycle gap**: added session-level sandbox APIs (`enter_sync`, `promote_session`, `discard_session`) and wired `NuwaTrainer.promote()/discard()` to use session-aware promote/discard paths for auditable sandbox workflows.
+- Updated `TrainingLoop` run docstring and callback contract doc to reflect the actual sandbox/session decision flow.
+
+### Changed
+
+- **P1 dependency packaging alignment**: moved web runtime deps out of core dependencies and kept them in extras (`web`) while including web deps in `dev` extras for local test/dev ergonomics.
+- Added regression tests:
+  - `tests/unit/test_running_phase.py`
+  - `tests/unit/test_sandbox_manager_session_ops.py`
+- Version bumped from `0.3.0` to `0.3.1` (patch release for stability fixes).
+
 ## [0.3.0] - 2026-03-29
 
 ### Added
