@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, SecretStr
 
 from nuwa.config.schema import NuwaConfig
+from nuwa.core.defaults import DEFAULT_WEB_PORT
 from nuwa.core.types import (
     RoundResult,
     TrainingResult,
@@ -98,6 +99,7 @@ _state: dict[str, Any] = {
     "stop_requested": False,
     "event_queue": None,  # asyncio.Queue | None
     "training_task": None,  # asyncio.Task | None
+    "original_config": None,  # dict | None — config at training start for diff
 }
 
 # ---------------------------------------------------------------------------
@@ -164,11 +166,11 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     logger.info("Nuwa server shutdown complete.")
 
 
-app = FastAPI(title="Nuwa Training Dashboard", version="0.2.0", lifespan=_lifespan)
+app = FastAPI(title="Nuwa Training Dashboard", version="0.2.1", lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 # CORS — origins read from NUWA_CORS_ORIGINS (comma-separated).
-# Defaults to ["http://localhost:8080", "http://127.0.0.1:8080"] for safety.
+# Defaults to ["http://localhost:9090", "http://127.0.0.1:9090"] for safety.
 # Set to "*" only for local-only development via NUWA_CORS_ORIGINS=*.
 # ---------------------------------------------------------------------------
 _cors_env = os.environ.get("NUWA_CORS_ORIGINS", "")
@@ -177,7 +179,12 @@ if _cors_env.strip() == "*":
 elif _cors_env.strip():
     _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
 else:
-    _cors_origins = ["http://localhost:8080", "http://127.0.0.1:8080"]
+    _cors_origins = [
+        f"http://localhost:{DEFAULT_WEB_PORT}",
+        f"http://127.0.0.1:{DEFAULT_WEB_PORT}",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -228,7 +235,18 @@ async def _auth_middleware(request: Request, call_next: Any) -> Any:
 
 
 def _safe_error(exc: Exception, status_code: int = 400) -> JSONResponse:
-    """Return a generic error to the client; log the real exception."""
+    """Return a safe error to the client.
+
+    Known application errors (ConfigError, ConnectorError, LLMError) are
+    returned verbatim so the UI can display a useful message.  Unexpected
+    exceptions are masked to avoid leaking internals.
+    """
+    from nuwa.core.exceptions import ConfigError, ConnectorError, LLMError
+
+    if isinstance(exc, (ConfigError, ConnectorError, LLMError)):
+        logger.warning("Request failed: %s", exc)
+        return JSONResponse({"error": str(exc)}, status_code=status_code)
+
     logger.exception("Request failed: %s", exc)
     return JSONResponse(
         {"error": "Request failed. Check server logs for details."}, status_code=status_code
@@ -251,6 +269,7 @@ def _reset_state() -> None:
     _state["stop_requested"] = False
     _state["event_queue"] = asyncio.Queue[dict[str, Any]]()
     _state["training_task"] = None
+    _state["original_config"] = None
 
 
 def _push_event(event: dict[str, Any]) -> None:
@@ -300,7 +319,7 @@ def _resolve_run_log() -> RunLog:
 @app.get("/api/health")
 async def health_check() -> JSONResponse:
     """Health check endpoint for load balancers and monitoring."""
-    return JSONResponse({"status": "ok", "version": "0.2.0"})
+    return JSONResponse({"status": "ok", "version": "0.2.1"})
 
 
 @app.get("/api/status")
@@ -478,6 +497,12 @@ async def train_start() -> JSONResponse:
     except Exception as exc:
         return _safe_error(exc, 400)
 
+    # Capture original config snapshot for diff display
+    try:
+        _state["original_config"] = target.get_current_config()
+    except Exception:
+        _state["original_config"] = None
+
     task = asyncio.create_task(_run_training(cfg, backend, target))
     _state["training_task"] = task
     return JSONResponse({"ok": True})
@@ -519,8 +544,9 @@ async def _event_generator(request: Request) -> AsyncIterator[dict[str, str]]:
             event = await asyncio.wait_for(q.get(), timeout=15.0)
             yield {"data": json.dumps(event)}
         except TimeoutError:
-            # Keepalive ping
-            yield {"event": "ping", "data": ""}
+            # Keepalive ping — use a comment line (SSE spec) so browsers
+            # stay connected without triggering onmessage handlers.
+            yield {"comment": "keepalive"}
         except asyncio.CancelledError:
             break
 
@@ -547,7 +573,10 @@ async def get_results() -> JSONResponse:
     result: TrainingResult | None = _state.get("training_result")
     if result is None:
         return JSONResponse(None)
-    return JSONResponse(_result_to_json(result))
+    data = _result_to_json(result)
+    # Inject original_config for frontend config diff display
+    data["original_config"] = _state.get("original_config")
+    return JSONResponse(data)
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +604,9 @@ async def get_results_rounds() -> JSONResponse:
                 "val_pass_rate": (round(rr.val_scores.pass_rate, 4) if rr.val_scores else None),
                 "reflection": (rr.reflection.diagnosis if rr.reflection else ""),
                 "mutation": (rr.mutation.description if rr.mutation else ""),
+                "failure_patterns": (rr.reflection.failure_patterns if rr.reflection else []),
+                "original_config": (rr.mutation.original_config if rr.mutation else None),
+                "proposed_config": (rr.mutation.proposed_config if rr.mutation else None),
                 "applied": rr.applied,
                 "timestamp": rr.timestamp.isoformat(),
             }
@@ -613,6 +645,10 @@ async def post_approve(body: ApproveRequest) -> JSONResponse:
     elif body.decision == "reject":
         _state["training_result"] = None
         _state["training_status"] = "idle"
+        _state["current_round"] = 0
+        _state["current_stage"] = ""
+        _state["round_history"] = []
+        _state["original_config"] = None
         return JSONResponse({"ok": True})
 
     elif body.decision == "extend":
@@ -894,6 +930,10 @@ async def demo_start() -> JSONResponse:
         )
 
     _reset_state()
+    _state["original_config"] = {
+        "system_prompt": "You are a helpful assistant.",
+        "detail_level": "medium",
+    }
 
     task = asyncio.create_task(_run_demo_training())
     _state["training_task"] = task
@@ -937,4 +977,4 @@ async def _spa_fallback(full_path: str) -> Any:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8080)  # nosec B104
+    uvicorn.run(app, host="0.0.0.0", port=DEFAULT_WEB_PORT)  # nosec B104

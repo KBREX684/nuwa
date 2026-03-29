@@ -119,7 +119,7 @@ DEFAULT_MAX_LATENCY_MS: float = 30_000.0
 # ---------------------------------------------------------------------------
 
 DEFAULT_WEB_HOST: str = "0.0.0.0"  # nosec B104
-DEFAULT_WEB_PORT: int = 8080
+DEFAULT_WEB_PORT: int = 9090
 SSE_KEEPALIVE_TIMEOUT_S: float = 15.0
 SHUTDOWN_TIMEOUT_S: float = 5.0
 DEMO_MAX_ROUNDS: int = 5

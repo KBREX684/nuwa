@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="api-base" content="">
 <title>女娲 Nuwa — 智能体训练控制台</title>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script defer src="vendor/alpine.min.js" onerror="this.src='https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js'"></script>
+<script src="vendor/echarts.min.js" onerror="this.src='https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js'"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap" rel="stylesheet">
 <style>
@@ -601,6 +602,7 @@ function nuwa() {
     /* --- state --- */
     view: 'setup',
     status: 'idle',
+    apiBase: (document.querySelector('meta[name="api-base"]')?.content) || '',
     cfg: {
       llm_model: 'openai/gpt-4o',
       llm_model_custom: '',
@@ -657,7 +659,7 @@ function nuwa() {
         this.initCharts();
       });
       // Check server status
-      fetch('/api/status').then(r => r.json()).then(d => {
+      fetch(this.apiBase + '/api/status').then(r => r.json()).then(d => {
         if (d.training_status) this.status = d.training_status;
         if (d.training_status === 'running') { this.view = 'monitor'; this.connectSSE(); this.startTimer(); }
       }).catch(() => {});
@@ -742,7 +744,7 @@ function nuwa() {
           consistency_threshold: this.cfg.consistency_threshold,
         };
         try {
-          const configResp = await fetch('/api/config', {
+          const configResp = await fetch(this.apiBase + '/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -750,7 +752,7 @@ function nuwa() {
           if (!configResp.ok) {
             throw new Error(await this.readApiError(configResp, '保存配置失败'));
           }
-          const startResp = await fetch('/api/train/start', { method: 'POST' });
+          const startResp = await fetch(this.apiBase + '/api/train/start', { method: 'POST' });
           if (!startResp.ok) {
             throw new Error(await this.readApiError(startResp, '启动训练失败'));
           }
@@ -763,7 +765,7 @@ function nuwa() {
         }
       } else {
         try {
-          const demoResp = await fetch('/api/demo/start', { method: 'POST' });
+          const demoResp = await fetch(this.apiBase + '/api/demo/start', { method: 'POST' });
           if (!demoResp.ok) {
             throw new Error(await this.readApiError(demoResp, '演示启动失败'));
           }
@@ -785,7 +787,7 @@ function nuwa() {
 
     async stopTraining() {
       try {
-        const resp = await fetch('/api/train/stop', { method: 'POST' });
+        const resp = await fetch(this.apiBase + '/api/train/stop', { method: 'POST' });
         if (!resp.ok) {
           throw new Error(await this.readApiError(resp, '停止训练失败'));
         }
@@ -798,7 +800,7 @@ function nuwa() {
     async approve(decision) {
       const body = { decision, extra_rounds: this.extraRounds };
       try {
-        const r = await fetch('/api/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const r = await fetch(this.apiBase + '/api/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!r.ok) {
           throw new Error(await this.readApiError(r, '提交审核决策失败'));
         }
@@ -818,16 +820,26 @@ function nuwa() {
     /* --- SSE --- */
     connectSSE() {
       if (this.eventSource) this.eventSource.close();
-      this.eventSource = new EventSource('/api/train/events');
+      this._sseRetries = 0;
+      this._doConnectSSE();
+    },
+
+    _doConnectSSE() {
+      this.eventSource = new EventSource(this.apiBase + '/api/train/events');
       this.eventSource.onmessage = (e) => {
-        if (e.data === ':ping') return;
+        this._sseRetries = 0; // reset on successful message
         try {
           const ev = JSON.parse(e.data);
           this.handleEvent(ev);
         } catch (err) {}
       };
       this.eventSource.onerror = () => {
-        // Will auto-reconnect
+        this.eventSource.close();
+        this._sseRetries = Math.min((this._sseRetries || 0) + 1, 8);
+        const delay = Math.min(1000 * Math.pow(2, this._sseRetries - 1), 30000);
+        setTimeout(() => {
+          if (this.status === 'running') this._doConnectSSE();
+        }, delay);
       };
     },
 
@@ -884,8 +896,8 @@ function nuwa() {
       try {
         // Fetch both endpoints in parallel
         const [resMain, resRounds] = await Promise.all([
-          fetch('/api/results').then(r => r.json()).catch(() => null),
-          fetch('/api/results/rounds').then(r => r.json()).catch(() => []),
+          fetch(this.apiBase + '/api/results').then(r => r.json()).catch(() => null),
+          fetch(this.apiBase + '/api/results/rounds').then(r => r.json()).catch(() => []),
         ]);
         // Prefer /api/results/rounds for per-round scores (properly extracted)
         const rounds = Array.isArray(resRounds) && resRounds.length ? resRounds : [];
@@ -896,9 +908,9 @@ function nuwa() {
             best_round: resMain?.best_round ?? (bestIdx + 1),
             best_val_score: resMain?.best_val_score ?? Math.max(...rounds.map(r => r.val_score || 0)),
             stop_reason: resMain?.stop_reason ?? 'completed',
-            original_config: rounds[0]?.original_config ?? resMain?.final_config,
-            final_config: resMain?.final_config ?? rounds[rounds.length - 1]?.final_config,
-            config_diff: true,
+            original_config: resMain?.original_config ?? rounds[0]?.original_config ?? null,
+            final_config: resMain?.final_config ?? rounds[rounds.length - 1]?.proposed_config ?? null,
+            config_diff: !!(resMain?.original_config || rounds[0]?.original_config),
           };
           this.view = 'results';
           this.$nextTick(() => this.initResultChart());

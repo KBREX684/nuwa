@@ -4,7 +4,7 @@ Optimise your AI agents through automated training loops powered by
 LLM-driven evaluation, reflection, and mutation.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __project__ = "女娲 Nuwa"
 
 # Re-export key public classes for convenient top-level imports.

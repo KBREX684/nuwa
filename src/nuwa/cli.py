@@ -257,7 +257,7 @@ def run_cmd(
 @app.command("web")
 def web_cmd(
     host: str = typer.Option("0.0.0.0", "--host", help="Web 服务监听地址。"),  # nosec B104
-    port: int = typer.Option(8080, "--port", "-p", help="Web 服务端口。"),
+    port: int = typer.Option(9090, "--port", "-p", help="Web 服务端口。"),
     reload: bool = typer.Option(False, "--reload", help="启用自动重载（开发模式）。"),
 ) -> None:
     """启动 Nuwa Web 控制台。"""
