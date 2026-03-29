@@ -387,7 +387,7 @@ def _build_report(
         if r.mutation:
             rd["mutation"] = {
                 "description": r.mutation.description[:300],
-                "rationale": r.mutation.rationale[:300] if r.mutation.rationale else "",
+                "rationale": r.mutation.reasoning[:300] if r.mutation.reasoning else "",
             }
         rounds_data.append(rd)
 
