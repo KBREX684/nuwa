@@ -53,6 +53,10 @@ class TrainingLoop:
         callbacks: list[Callable[..., Any]] | None = None,
         sandbox: SandboxManager | None = None,
         parallel_config: dict[str, Any] | None = None,
+        start_round: int = 1,
+        initial_history: list[RoundResult] | None = None,
+        initial_best_config: dict[str, Any] | None = None,
+        initial_best_val_score: float = 0.0,
     ) -> None:
         self._config = config
         self._backend = backend
@@ -60,6 +64,12 @@ class TrainingLoop:
         self._guardrails = list(guardrails)
         self._callbacks = callbacks or []
         self._sandbox = sandbox
+        self._start_round = max(1, start_round)
+        self._initial_history = list(initial_history) if initial_history else []
+        self._initial_best_config = (
+            dict(initial_best_config) if initial_best_config is not None else None
+        )
+        self._initial_best_val_score = max(0.0, float(initial_best_val_score))
         self._scheduler = TrainingScheduler(config)
         self._objective_set: ObjectiveSet | None = None
         self._pareto_tracker: ParetoTracker | None = None
@@ -125,20 +135,46 @@ class TrainingLoop:
         else:
             active_target = self._target
 
+        starting_config = active_target.get_current_config()
+        if self._initial_best_config is not None:
+            active_target.apply_config(self._initial_best_config)
+            starting_config = dict(self._initial_best_config)
+
         context = LoopContext(
             config=self._config,
             backend_ref=self._backend,
             target_ref=active_target,
-            round_num=0,
-            current_config=active_target.get_current_config(),
-            best_config=active_target.get_current_config(),
-            best_val_score=0.0,
+            round_num=max(0, self._start_round - 1),
+            current_config=starting_config,
+            best_config=starting_config,
+            best_val_score=self._initial_best_val_score,
         )
+        if self._initial_history:
+            context.history = list(self._initial_history)
+
+        if self._initial_best_config is not None:
+            context.best_config = dict(self._initial_best_config)
+
+        if context.history and context.best_val_score <= 0.0:
+            inferred_best = max(
+                (
+                    rr.val_scores.mean_score
+                    for rr in context.history
+                    if rr.val_scores is not None
+                ),
+                default=0.0,
+            )
+            context.best_val_score = inferred_best
 
         stop_reason = "max_rounds reached"
+        if self._start_round > self._config.max_rounds:
+            stop_reason = (
+                f"resume no-op: start_round ({self._start_round}) > "
+                f"max_rounds ({self._config.max_rounds})"
+            )
 
         try:
-            for round_num in range(1, self._config.max_rounds + 1):
+            for round_num in range(self._start_round, self._config.max_rounds + 1):
                 context.round_num = round_num
                 logger.info("===== Round %d / %d =====", round_num, self._config.max_rounds)
 

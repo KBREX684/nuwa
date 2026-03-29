@@ -20,6 +20,12 @@ class TestNuwaConfigDefaults:
         cfg = NuwaConfig()
         assert cfg.project_dir is not None
 
+    def test_default_resume_and_distributed(self):
+        cfg = NuwaConfig()
+        assert cfg.distributed_workers == 1
+        assert cfg.resume is False
+        assert cfg.plugin_modules == []
+
 
 class TestNuwaConfigValidation:
     def test_max_rounds_minimum(self):
@@ -33,6 +39,10 @@ class TestNuwaConfigValidation:
     def test_samples_per_round_minimum(self):
         with pytest.raises(Exception):
             NuwaConfig(samples_per_round=0)
+
+    def test_distributed_workers_minimum(self):
+        with pytest.raises(Exception):
+            NuwaConfig(distributed_workers=0)
 
     def test_train_val_split_bounds(self):
         with pytest.raises(Exception):

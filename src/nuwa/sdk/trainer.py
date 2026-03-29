@@ -29,6 +29,7 @@ from typing import Any
 from nuwa.connectors.function_call import FunctionCallAdapter
 from nuwa.core.protocols import TargetAgent
 from nuwa.core.types import TrainingConfig, TrainingResult
+from nuwa.engine.distributed.coordinator import DistributedTrainingCoordinator
 from nuwa.engine.loop import TrainingLoop
 from nuwa.guardrails.consistency import ConsistencyGuardrail
 from nuwa.guardrails.overfitting import OverfittingGuardrail
@@ -131,6 +132,7 @@ class NuwaTrainer:
         regression_tolerance: float = 0.05,
         consistency_threshold: float = 0.8,
         sandbox: bool = True,
+        distributed_workers: int = 1,
         project_dir: str | Path = ".nuwa",
         on_round_end: Callable[..., Any] | None = None,
         verbose: bool = True,
@@ -155,7 +157,10 @@ class NuwaTrainer:
         self._direction = training_direction
         self._sandbox = sandbox
         self._verbose = verbose
+        self._distributed_workers = max(1, distributed_workers)
         self._project_dir = Path(project_dir)
+        if distributed_workers < 1:
+            raise ValueError("distributed_workers must be >= 1")
 
         # Configure logging level based on verbose flag.
         if verbose:
@@ -173,11 +178,12 @@ class NuwaTrainer:
         self._original_config: dict[str, Any] = copy.deepcopy(self._target.get_current_config())
 
         # Build the LLM backend.
-        self._backend = LiteLLMBackend(
-            model=model,
-            api_key=llm_api_key,
-            base_url=llm_base_url,
-        )
+        self._backend_kwargs: dict[str, Any] = {
+            "model": model,
+            "api_key": llm_api_key,
+            "base_url": llm_base_url,
+        }
+        self._backend = LiteLLMBackend(**self._backend_kwargs)
 
         # Build the training config.
         self._training_config = TrainingConfig(
@@ -228,22 +234,56 @@ class NuwaTrainer:
         Guardrails (overfitting, regression, consistency) are checked
         between rounds and may terminate training early.
         """
-        loop = TrainingLoop(
-            config=self._training_config,
-            backend=self._backend,
-            target=self._target,
-            guardrails=self._guardrails,
-            callbacks=self._callbacks,
-            sandbox=self._sandbox_manager,
-        )
-
         logger.info(
-            "Starting Nuwa training: direction=%r, max_rounds=%d",
+            "Starting Nuwa training: direction=%r, max_rounds=%d, workers=%d",
             self._direction,
             self._training_config.max_rounds,
+            self._distributed_workers,
         )
 
-        self._result = await loop.run()
+        if self._distributed_workers <= 1:
+            loop = TrainingLoop(
+                config=self._training_config,
+                backend=self._backend,
+                target=self._target,
+                guardrails=self._guardrails,
+                callbacks=self._callbacks,
+                sandbox=self._sandbox_manager,
+            )
+            self._result = await loop.run()
+        else:
+            if not self._sandbox:
+                raise ValueError(
+                    "distributed training requires sandbox=True to avoid shared-state mutations."
+                )
+
+            coordinator = DistributedTrainingCoordinator()
+            worker_managers: list[SandboxManager] = []
+            worker_runs = []
+            for worker_idx in range(self._distributed_workers):
+                worker_backend = LiteLLMBackend(**self._backend_kwargs)
+                worker_manager = SandboxManager(
+                    self._target,
+                    project_dir=self._project_dir / "distributed" / f"worker_{worker_idx + 1}",
+                )
+                worker_managers.append(worker_manager)
+                worker_loop = TrainingLoop(
+                    config=self._training_config,
+                    backend=worker_backend,
+                    target=self._target,
+                    guardrails=self._guardrails,
+                    callbacks=self._callbacks,
+                    sandbox=worker_manager,
+                )
+                worker_runs.append(worker_loop.run)
+
+            winner, all_results, winner_idx = await coordinator.run_workers(worker_runs)
+            self._sandbox_manager = worker_managers[winner_idx]
+            self._result = winner
+            logger.info(
+                "Distributed workers scores: %s",
+                [round(result.best_val_score, 4) for result in all_results],
+            )
 
         logger.info(
             "Training complete: best_val_score=%.4f (round %d), stop_reason=%r",
@@ -336,7 +376,9 @@ class NuwaTrainer:
         status = "trained" if self._result is not None else "pending"
         return (
             f"NuwaTrainer(direction={self._direction!r}, "
-            f"max_rounds={self._training_config.max_rounds}, status={status!r})"
+            f"max_rounds={self._training_config.max_rounds}, "
+            f"workers={self._distributed_workers}, "
+            f"status={status!r})"
         )
 
     # ------------------------------------------------------------------

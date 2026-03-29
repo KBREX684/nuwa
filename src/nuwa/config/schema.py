@@ -68,6 +68,16 @@ class NuwaConfig(BaseModel):
     consistency_runs: int = Field(default=3, ge=1)
     consistency_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     regression_tolerance: float = Field(default=0.05, ge=0.0)
+    distributed_workers: int = Field(
+        default=1,
+        ge=1,
+        le=64,
+        description="Number of parallel training workers in distributed mode.",
+    )
+    resume: bool = Field(
+        default=False,
+        description="Whether to resume training from existing project logs/snapshots.",
+    )
 
     # -- Misc ----------------------------------------------------------
     project_dir: Path = Field(
@@ -75,6 +85,13 @@ class NuwaConfig(BaseModel):
         description="Directory for persisted artefacts (runs, logs, configs).",
     )
     verbose: bool = False
+    plugin_modules: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional plugin modules to auto-load before building runtime objects. "
+            "Each module may expose register()/register_plugin()/setup_plugin()."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Validators
@@ -157,6 +174,10 @@ class NuwaConfig(BaseModel):
         Uses :func:`nuwa.connectors.registry.create_connector`.
         """
         from nuwa.connectors.registry import create_connector
+        from nuwa.plugins.loader import load_plugins
+
+        if self.plugin_modules:
+            load_plugins(self.plugin_modules)
 
         return create_connector(self.connector_type, **self.connector_params)
 

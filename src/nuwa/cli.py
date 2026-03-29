@@ -4,6 +4,7 @@ Entry points
 ------------
 - ``nuwa train``   -- interactive training session
 - ``nuwa run``     -- headless training from a config file
+- ``nuwa benchmark`` -- benchmark suite listing/runs
 - ``nuwa web``     -- launch the web dashboard server
 - ``nuwa status``  -- show last training run results
 - ``nuwa init``    -- generate a default config file
@@ -13,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -29,6 +32,8 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+benchmark_app = typer.Typer(help="运行 Nuwa 基准测试套件。")
+app.add_typer(benchmark_app, name="benchmark")
 
 
 # ------------------------------------------------------------------
@@ -168,6 +173,11 @@ def run_cmd(
         readable=True,
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="启用详细日志输出。"),
+    resume: bool | None = typer.Option(
+        None,
+        "--resume/--no-resume",
+        help="是否启用断点续训（默认跟随配置文件 resume 字段）。",
+    ),
 ) -> None:
     """从配置文件启动无头训练。
 
@@ -192,8 +202,11 @@ def run_cmd(
 
     renderer.status(f"训练目标: {config.training_direction}")
     renderer.status(f"最大轮数: {config.max_rounds}")
+    renderer.status(f"分布式 worker: {config.distributed_workers}")
 
     # Build runtime objects from config
+    from nuwa.core.types import TrainingResult
+    from nuwa.engine.distributed.coordinator import DistributedTrainingCoordinator
     from nuwa.engine.loop import TrainingLoop
     from nuwa.guardrails.consistency import ConsistencyGuardrail
     from nuwa.guardrails.overfitting import OverfittingGuardrail
@@ -201,9 +214,9 @@ def run_cmd(
     from nuwa.llm.backend import LiteLLMBackend
     from nuwa.persistence.artifact_store import ArtifactStore
     from nuwa.persistence.run_log import RunLog
+    from nuwa.sandbox.manager import SandboxManager
 
     llm_kwargs = config.build_llm_kwargs()
-    backend = LiteLLMBackend(**llm_kwargs)
     connector = config.build_connector()
     training_config = config.build_training_config()
 
@@ -213,32 +226,114 @@ def run_cmd(
         ConsistencyGuardrail(threshold=config.consistency_threshold),
     ]
 
-    loop = TrainingLoop(
-        config=training_config,
-        backend=backend,
-        target=connector,
-        guardrails=guardrails,
-    )
-
     project_dir = config.project_dir
     project_dir.mkdir(parents=True, exist_ok=True)
     run_log = RunLog(log_dir=project_dir)
     artifact_store = ArtifactStore(store_dir=project_dir / "artifacts")
+    results_file = project_dir / "last_result.json"
+
+    resume_enabled = config.resume if resume is None else resume
+    start_round = 1
+    initial_history: list[Any] = []
+    initial_best_config: dict[str, Any] | None = None
+    initial_best_val_score = 0.0
+
+    if resume_enabled:
+        initial_history = run_log.load_history()
+        if initial_history:
+            start_round = max(rr.round_num for rr in initial_history) + 1
+            renderer.status(
+                f"Resume 模式开启：已有 {len(initial_history)} 条历史记录，"
+                f"从第 {start_round} 轮继续。"
+            )
+
+            if results_file.exists():
+                try:
+                    previous = TrainingResult.model_validate_json(
+                        results_file.read_text(encoding="utf-8")
+                    )
+                    initial_best_config = dict(previous.final_config)
+                    initial_best_val_score = previous.best_val_score
+                except Exception as exc:
+                    renderer.warning(f"读取 last_result.json 失败，回退到日志推断: {exc}")
+
+            if initial_best_config is None:
+                best_round = run_log.get_best_round()
+                if best_round is not None:
+                    if best_round.val_scores is not None:
+                        initial_best_val_score = best_round.val_scores.mean_score
+                    else:
+                        initial_best_val_score = best_round.train_scores.mean_score
+
+                snapshots = artifact_store.list_snapshots()
+                if snapshots:
+                    initial_best_config = artifact_store.load_config_snapshot(snapshots[-1])
+        else:
+            renderer.warning("Resume 已启用，但未检测到历史记录，将从第 1 轮开始。")
 
     renderer.status("训练循环启动中...")
 
     try:
-        result = asyncio.run(loop.run())
+        if config.distributed_workers > 1:
+            workers = config.distributed_workers
+            coordinator = DistributedTrainingCoordinator()
+
+            async def _run_distributed() -> TrainingResult:
+                worker_runs = []
+                for worker_idx in range(workers):
+                    worker_backend = LiteLLMBackend(**llm_kwargs)
+                    worker_sandbox = SandboxManager(
+                        connector,
+                        project_dir=project_dir / "sandbox_workers" / f"worker_{worker_idx + 1}",
+                    )
+                    worker_loop = TrainingLoop(
+                        config=training_config,
+                        backend=worker_backend,
+                        target=connector,
+                        guardrails=guardrails,
+                        sandbox=worker_sandbox,
+                        start_round=start_round,
+                        initial_history=initial_history,
+                        initial_best_config=initial_best_config,
+                        initial_best_val_score=initial_best_val_score,
+                    )
+                    worker_runs.append(worker_loop.run)
+
+                winner, all_results, winner_idx = await coordinator.run_workers(worker_runs)
+                renderer.success(
+                    f"分布式训练完成：worker {winner_idx + 1}/{workers} 胜出，"
+                    f"最佳验证分={winner.best_val_score:.3f}"
+                )
+                renderer.status(
+                    "各 worker 验证分: "
+                    + ", ".join(f"{idx + 1}:{r.best_val_score:.3f}" for idx, r in enumerate(all_results))
+                )
+                return winner
+
+            result = asyncio.run(_run_distributed())
+        else:
+            backend = LiteLLMBackend(**llm_kwargs)
+            loop = TrainingLoop(
+                config=training_config,
+                backend=backend,
+                target=connector,
+                guardrails=guardrails,
+                start_round=start_round,
+                initial_history=initial_history,
+                initial_best_config=initial_best_config,
+                initial_best_val_score=initial_best_val_score,
+            )
+            result = asyncio.run(loop.run())
     except Exception as exc:
         renderer.error(f"训练循环执行失败: {exc}")
         raise typer.Exit(code=1)
 
-    # Persist round results to run log
-    for rr in result.rounds:
+    # Persist only newly executed rounds when running in resume mode.
+    rounds_to_persist = [rr for rr in result.rounds if rr.round_num >= start_round]
+    for rr in rounds_to_persist:
         run_log.append_round(rr)
 
     # Save final result as JSON for `nuwa status`
-    results_file = project_dir / "last_result.json"
     results_file.write_text(result.model_dump_json(indent=2), encoding="utf-8")
 
     # Save final config snapshot
@@ -247,6 +342,123 @@ def run_cmd(
 
     # Display final results
     renderer.approval_panel(result)
+
+
+# ------------------------------------------------------------------
+# benchmark
+# ------------------------------------------------------------------
+
+
+@benchmark_app.command("list")
+def benchmark_list_cmd(
+    config_path: Path | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="可选：加载配置并注册插件后再列出 benchmark。",
+    ),
+) -> None:
+    """列出可用 benchmark 套件。"""
+    from nuwa.benchmarks.registry import get_benchmark, list_benchmarks
+    from nuwa.config.schema import NuwaConfig
+    from nuwa.conversation.renderer import NuwaRenderer
+    from nuwa.plugins.loader import load_plugins
+
+    renderer = NuwaRenderer()
+
+    if config_path is not None:
+        if not config_path.exists():
+            renderer.error(f"配置文件不存在: {config_path}")
+            raise typer.Exit(code=1)
+        try:
+            cfg = NuwaConfig.from_yaml(config_path)
+            if cfg.plugin_modules:
+                load_plugins(cfg.plugin_modules)
+        except Exception as exc:
+            renderer.error(f"配置文件加载失败: {exc}")
+            raise typer.Exit(code=1)
+
+    suites = list_benchmarks()
+    if not suites:
+        renderer.warning("当前未注册任何 benchmark 套件。")
+        return
+
+    renderer.success(f"可用 benchmark 套件: {len(suites)}")
+    for suite_name in suites:
+        suite = get_benchmark(suite_name)
+        renderer.console.print(
+            f"- [cyan]{suite.name}[/cyan] "
+            f"({len(suite.cases)} cases): {suite.description}"
+        )
+
+
+@benchmark_app.command("run")
+def benchmark_run_cmd(
+    config_path: Path = typer.Option(
+        ...,
+        "--config",
+        "-c",
+        help="YAML 配置文件路径（用于构建目标连接器）。",
+        exists=True,
+        readable=True,
+    ),
+    suite: str = typer.Option(
+        ...,
+        "--suite",
+        "-s",
+        help="benchmark 套件名称，可通过 `nuwa benchmark list` 查看。",
+    ),
+    max_concurrency: int = typer.Option(5, "--max-concurrency", help="最大并发执行数。"),
+) -> None:
+    """运行指定 benchmark 套件并输出评分结果。"""
+    from nuwa.benchmarks.runner import run_benchmark
+    from nuwa.config.schema import NuwaConfig
+    from nuwa.conversation.renderer import NuwaRenderer
+
+    renderer = NuwaRenderer()
+    renderer.banner()
+
+    try:
+        cfg = NuwaConfig.from_yaml(config_path)
+    except Exception as exc:
+        renderer.error(f"配置文件加载失败: {exc}")
+        raise typer.Exit(code=1)
+
+    connector = cfg.build_connector()
+    runtime_config = connector.get_current_config()
+
+    try:
+        result = asyncio.run(
+            run_benchmark(
+                connector,
+                suite_name=suite,
+                config=runtime_config,
+                max_concurrency=max_concurrency,
+            )
+        )
+    except KeyError as exc:
+        renderer.error(str(exc))
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        renderer.error(f"Benchmark 执行失败: {exc}")
+        raise typer.Exit(code=1)
+
+    renderer.success(
+        f"Benchmark 完成: {result.suite_name} | "
+        f"mean_score={result.mean_score:.3f} | pass_rate={result.pass_rate:.1%}"
+    )
+    for case in result.cases:
+        renderer.console.print(
+            f"- {case.case_id}: score=[green]{case.score:.3f}[/green], "
+            f"latency={case.latency_ms:.1f}ms"
+        )
+
+    output_dir = cfg.project_dir / "benchmarks"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    out_path = output_dir / f"{result.suite_name}_{timestamp}.json"
+    out_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+    renderer.status(f"结果已保存: {out_path}")
 
 
 # ------------------------------------------------------------------

@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/KBREX684/nuwa/actions/workflows/ci.yml/badge.svg)](https://github.com/KBREX684/nuwa/actions)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-0.3.1-brightgreen)](https://github.com/KBREX684/nuwa/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-brightgreen)](https://github.com/KBREX684/nuwa/releases)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-KBREX684%2Fnuwa-black?logo=github)](https://github.com/KBREX684/nuwa)
 
@@ -79,6 +79,14 @@ Inspired by automated research frameworks: let an agent handle the work of tunin
   LLM API 连续失败时自动熔断，防止雪崩效应
 - **Rate limiting / 速率限制**
   Web API 内置请求频率限制，防止滥用
+- **Plugin system / 插件系统**
+  通过 `plugin_modules` 机制动态扩展连接器与 benchmark 套件
+- **Benchmark suite / 标准评测集**
+  内置中英双语 baseline 套件，支持 `nuwa benchmark list/run`
+- **Distributed training / 分布式训练**
+  支持多 worker 并行训练并自动选优
+- **Training resume / 断点续训**
+  从 `runs.jsonl` 与快照恢复训练上下文，继续迭代
 
 ## 架构 / Architecture
 
@@ -161,6 +169,14 @@ nuwa train
 
 ```bash
 nuwa run --config config.yaml
+nuwa run --config config.yaml --resume
+```
+
+### Benchmark 模式
+
+```bash
+nuwa benchmark list
+nuwa benchmark run --config config.yaml --suite customer_support_cn
 ```
 
 ### Python SDK（推荐）
@@ -260,6 +276,9 @@ overfitting_threshold: 0.15
 regression_tolerance: 0.05
 consistency_threshold: 0.8
 consistency_runs: 3
+distributed_workers: 1
+resume: false
+plugin_modules: []
 project_dir: .nuwa
 ```
 
@@ -381,10 +400,10 @@ make check
 - [x] Rate limiting — Web API 速率限制
 - [x] Health check — /api/health 端点
 - [x] Anti-drift mechanism — training_direction 对齐检查，防止目标漂移
-- [ ] Plugin system — 可插拔的评估器、变异策略和连接器
-- [ ] Benchmark suite — 内置标准化评测集
-- [ ] Distributed training — 多机并行训练
-- [ ] Training resume — 断点续训
+- [x] Plugin system — 可插拔连接器与 benchmark 注册
+- [x] Benchmark suite — 内置标准化评测集与 CLI 运行入口
+- [x] Distributed training — 多 worker 并行训练与胜者选优
+- [x] Training resume — 断点续训
 
 ## 许可证 / License
 

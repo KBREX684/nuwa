@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-29
+
+### Added
+
+- **Plugin system (MVP)**:
+  - Added `nuwa.plugins` package with `PluginContext` and dynamic loader (`load_plugin(s)`).
+  - Plugins can register custom connectors and benchmark suites at runtime.
+- **Benchmark suite (MVP)**:
+  - Added built-in suites (`customer_support_cn`, `reasoning_basic_en`).
+  - Added benchmark runner and result models with mean score / pass rate aggregation.
+  - Added CLI commands: `nuwa benchmark list` and `nuwa benchmark run`.
+- **Distributed training (MVP)**:
+  - Added distributed coordinator to run multiple training workers concurrently and auto-select winner by best validation score.
+  - Wired distributed mode into CLI (`distributed_workers`) and SDK (`NuwaTrainer(distributed_workers=...)`).
+- **Training resume (MVP)**:
+  - Added resume config fields and loop bootstrap support (`start_round`, `initial_history`, `initial_best_config`).
+  - Wired CLI `nuwa run --resume/--no-resume` with history/snapshot restoration.
+
+### Changed
+
+- Updated README roadmap: remaining 4 goals are now marked complete.
+- Version bumped from `0.3.1` to `0.4.0` (minor release for new capabilities).
+
+### Tests
+
+- Added new test coverage:
+  - `tests/unit/test_plugins_loader.py`
+  - `tests/unit/test_benchmarks_runner.py`
+  - `tests/unit/test_distributed_coordinator.py`
+  - `tests/unit/test_training_loop_resume.py`
+
 ## [0.3.1] - 2026-03-29
 
 ### Fixed
