@@ -157,11 +157,7 @@ class TrainingLoop:
 
         if context.history and context.best_val_score <= 0.0:
             inferred_best = max(
-                (
-                    rr.val_scores.mean_score
-                    for rr in context.history
-                    if rr.val_scores is not None
-                ),
+                (rr.val_scores.mean_score for rr in context.history if rr.val_scores is not None),
                 default=0.0,
             )
             context.best_val_score = inferred_best

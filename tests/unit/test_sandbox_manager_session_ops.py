@@ -15,7 +15,9 @@ class _MockTargetAgent:
         self._config = dict(config or {"mode": "prod", "temp": 0.5})
 
     async def invoke(self, input_text: str, config: dict[str, Any] | None = None) -> AgentResponse:
-        return AgentResponse(output_text=input_text, latency_ms=1.0, raw_metadata={"config": config})
+        return AgentResponse(
+            output_text=input_text, latency_ms=1.0, raw_metadata={"config": config}
+        )
 
     def get_current_config(self) -> dict[str, Any]:
         return dict(self._config)

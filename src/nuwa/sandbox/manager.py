@@ -199,8 +199,7 @@ class SandboxManager:
         sandboxed = self._sessions.get(session_id)
         if sandboxed is None:
             raise ValueError(
-                f"Unknown sandbox session {session_id!r}. "
-                "Was it created by this SandboxManager?"
+                f"Unknown sandbox session {session_id!r}. Was it created by this SandboxManager?"
             )
         return sandboxed
 

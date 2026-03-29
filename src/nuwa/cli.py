@@ -306,7 +306,9 @@ def run_cmd(
                 )
                 renderer.status(
                     "各 worker 验证分: "
-                    + ", ".join(f"{idx + 1}:{r.best_val_score:.3f}" for idx, r in enumerate(all_results))
+                    + ", ".join(
+                        f"{idx + 1}:{r.best_val_score:.3f}" for idx, r in enumerate(all_results)
+                    )
                 )
                 return winner
 
@@ -387,8 +389,7 @@ def benchmark_list_cmd(
     for suite_name in suites:
         suite = get_benchmark(suite_name)
         renderer.console.print(
-            f"- [cyan]{suite.name}[/cyan] "
-            f"({len(suite.cases)} cases): {suite.description}"
+            f"- [cyan]{suite.name}[/cyan] ({len(suite.cases)} cases): {suite.description}"
         )
 
 
