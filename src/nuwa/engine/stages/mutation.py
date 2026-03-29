@@ -56,6 +56,7 @@ class MutationStage:
             current_prompt=current_prompt,
             current_config=config_json,
             max_mutations=MAX_MUTATIONS_PER_PROPOSAL,
+            training_direction=context.config.training_direction,
         )
 
         messages: list[dict[str, Any]] = [
@@ -83,6 +84,17 @@ class MutationStage:
             rationales: list[str] = []
 
             for mut in mutations_list:
+                # Anti-drift: skip mutations the LLM marked as unaligned
+                # Default to True for backward compatibility (if LLM omits field)
+                direction_aligned = mut.get("direction_aligned", True)
+                if direction_aligned is False:
+                    logger.info(
+                        "Round %d: filtering unaligned mutation: %s",
+                        context.round_num,
+                        mut.get("description_en", "")[:80],
+                    )
+                    continue
+
                 mut_type = mut.get("type", "")
                 desc = mut.get("description_en", "") or mut.get("description_zh", "")
                 rationale = mut.get("rationale_en", "") or mut.get("rationale_zh", "")

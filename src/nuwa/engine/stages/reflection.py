@@ -153,6 +153,7 @@ class ReflectionStage:
         prompt = _REFLECTION_TEMPLATE.render(
             scored_results=items_for_prompt,
             current_config=config_snapshot,
+            training_direction=context.config.training_direction,
         )
         # Prepend summary statistics so the LLM sees the big picture first.
         prompt = summary_stats + "\n\n" + prompt
@@ -192,6 +193,16 @@ class ReflectionStage:
 
             proposed_changes: list[str] = []
             for pc in data.get("proposed_changes", []):
+                # Anti-drift: filter out changes the LLM marked as unaligned
+                # Default to True for backward compatibility (if LLM omits field)
+                aligned = pc.get("aligned", True)
+                if aligned is False:
+                    logger.info(
+                        "Round %d: filtering unaligned proposed change: %s",
+                        context.round_num,
+                        pc.get("description_en", "")[:80],
+                    )
+                    continue
                 desc = pc.get("description_en", "") or pc.get("description_zh", "")
                 if desc:
                     proposed_changes.append(desc)

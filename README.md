@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/KBREX684/nuwa/actions/workflows/ci.yml/badge.svg)](https://github.com/KBREX684/nuwa/actions)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-0.2.1-brightgreen)](https://github.com/KBREX684/nuwa/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-brightgreen)](https://github.com/KBREX684/nuwa/releases)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-KBREX684%2Fnuwa-black?logo=github)](https://github.com/KBREX684/nuwa)
 
@@ -380,6 +380,7 @@ make check
 - [x] Circuit breaker — LLM API 熔断器
 - [x] Rate limiting — Web API 速率限制
 - [x] Health check — /api/health 端点
+- [x] Anti-drift mechanism — training_direction 对齐检查，防止目标漂移
 - [ ] Plugin system — 可插拔的评估器、变异策略和连接器
 - [ ] Benchmark suite — 内置标准化评测集
 - [ ] Distributed training — 多机并行训练

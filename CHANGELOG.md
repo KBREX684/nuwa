@@ -5,7 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.1] - 2026-03-29
+## [0.3.0] - 2026-03-29
+
+### Added
+
+- **Anti-drift mechanism**: reflection and mutation stages now reference `training_direction` from the config, ensuring proposed changes stay aligned with the user's training goal over many rounds
+- Alignment check field (`aligned` / `direction_aligned`) added to reflection and mutation prompt templates with backward-compatible defaults
+- Customer service demo (`examples/customer_service_demo/`) with 10-round before/after evaluation framework
+- 12 UI fixes in web dashboard:
+  - Mobile responsive layout (nav wrap, 4-col→2-col grid)
+  - `:focus-visible` keyboard accessibility for all interactive elements
+  - Dark theme `<select>` dropdowns with custom SVG arrow
+  - Toast notification system replacing `alert()` calls
+  - ECharts "waiting for data" placeholder for empty charts
+  - Firefox `::-moz-range-thumb` compatibility
+  - Table zebra striping for readability
+  - Button text wrapping fix
+  - `prefers-reduced-motion` accessibility support
+  - Touch targets ≥44px on coarse pointer devices
+  - Noise overlay z-index fix
+
+### Changed
+
+- Version bumped from 0.2.2 to 0.3.0 (new feature = minor bump)
+
+## [0.2.2] - 2026-03-29
 
 ### Fixed
 

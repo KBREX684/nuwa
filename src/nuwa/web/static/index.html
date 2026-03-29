@@ -48,13 +48,14 @@ body {
 }
 /* Subtle noise */
 body::after {
-  content: ''; position: fixed; inset: 0; z-index: 99999; pointer-events: none;
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
   opacity: 0.5;
 }
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-h); border-radius: 3px; }
+* { scrollbar-width: thin; scrollbar-color: var(--border-h) transparent; }
 
 /* === LAYOUT === */
 .shell { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
@@ -115,9 +116,14 @@ input[type="text"], input[type="password"], input[type="number"], textarea, sele
   color: var(--text-0); font-family: var(--font-mono); font-size: 0.85rem;
   transition: border-color 0.2s, box-shadow 0.2s; outline: none;
 }
-input:focus, textarea:focus, select:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
+input:focus-visible, textarea:focus-visible, select:focus-visible { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
+.btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.nav-tab:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
 textarea { font-family: var(--font-body); resize: vertical; min-height: 80px; }
-select { cursor: pointer; }
+select { cursor: pointer; -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23706d65'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+select option { background: var(--bg-2); color: var(--text-0); }
 .range-wrap { display: flex; align-items: center; gap: 12px; }
 input[type="range"] {
   flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px;
@@ -127,12 +133,16 @@ input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
   background: var(--amber); cursor: pointer; border: 2px solid var(--bg-1);
 }
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--amber); cursor: pointer; border: 2px solid var(--bg-1);
+}
 .range-val { font-family: var(--font-mono); font-size: 0.8rem; color: var(--amber); min-width: 36px; text-align: right; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 10px 24px; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
   cursor: pointer; border: none; font-family: var(--font-body);
-  transition: all 0.2s; white-space: nowrap;
+  transition: all 0.2s;
 }
 .btn-primary { background: var(--amber); color: var(--bg-0); }
 .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
@@ -146,6 +156,15 @@ input[type="range"]::-webkit-slider-thumb {
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
 @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+/* H1: mobile responsive */
+@media (max-width: 640px) {
+  .nav-inner { flex-wrap: wrap; height: auto; padding: 10px 0; gap: 8px; }
+  .nav-tabs { order: 3; width: 100%; justify-content: center; }
+  .shell { padding: 0 12px; }
+  .section { padding: 20px 0 40px; }
+  /* Results 4-col → 2-col on mobile */
+  [style*="grid-template-columns:repeat(4"] { grid-template-columns: 1fr 1fr !important; }
+}
 
 /* === STAGE PIPELINE === */
 .pipeline { display: flex; align-items: center; gap: 4px; overflow-x: auto; padding: 4px 0; }
@@ -185,6 +204,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text-1); }
 .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+.data-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+.data-table tbody tr:nth-child(even):hover td { background: rgba(255,255,255,0.035); }
 .expand-row td { padding: 0; }
 .expand-content {
   padding: 14px 20px; background: var(--bg-1); border-radius: 0 0 8px 8px;
@@ -221,6 +242,31 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* === CHART === */
 .chart-wrap { width: 100%; border-radius: var(--radius); overflow: hidden; background: var(--bg-1); border: 1px solid var(--border); }
+
+/* === TOAST (H4: replaces alert()) === */
+.toast-container { position: fixed; top: 70px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  padding: 12px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
+  background: var(--bg-3); color: var(--text-0); border: 1px solid var(--border-h);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4); animation: toastIn 0.3s ease;
+  max-width: 360px;
+}
+.toast.toast-success { border-left: 3px solid var(--green); }
+.toast.toast-error { border-left: 3px solid var(--red); }
+.toast.toast-info { border-left: 3px solid var(--cyan); }
+@keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+
+/* === ACCESSIBILITY === */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  html { scroll-behavior: auto; }
+}
+@media (pointer: coarse) {
+  .nav-tab, .btn { min-height: 44px; }
+  .pipe-stage { padding: 10px 16px; }
+  input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
+  input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; }
+}
 </style>
 </head>
 <body>
@@ -593,6 +639,14 @@ input[type="range"]::-webkit-slider-thumb {
   </template>
 </div>
 
+<!-- Toast container (H4) -->
+<div class="toast-container">
+  <template x-for="(t, i) in toasts" :key="i">
+    <div class="toast" :class="'toast-'+t.type" x-text="t.msg" x-show="t.visible"
+         x-transition:enter="toastIn" @click="t.visible=false"></div>
+  </template>
+</div>
+
 </div><!-- end alpine root -->
 
 <!-- ========================= ALPINE LOGIC ========================= -->
@@ -641,6 +695,7 @@ function nuwa() {
     timerInterval: null,
     startTime: null,
     elapsedTime: '00:00',
+    toasts: [],
 
     /* --- computed --- */
     get statusLabel() {
@@ -713,7 +768,15 @@ function nuwa() {
 
     updateScoreChart() {
       if (!this.scoreChart) return;
-      this.scoreChart.setOption(this.chartOpts(this.roundScores, false));
+      if (this.roundScores.length === 0) {
+        this.scoreChart.setOption({
+          backgroundColor: 'transparent',
+          graphic: [{ type: 'text', left: 'center', top: 'middle',
+            style: { text: '等待训练数据...', fill: '#706d65', fontFamily: 'Noto Sans SC', fontSize: 14 } }]
+        });
+        return;
+      }
+      this.scoreChart.setOption(this.chartOpts(this.roundScores, false), true);
     },
 
     updateResultChart() {
@@ -804,7 +867,7 @@ function nuwa() {
         if (!r.ok) {
           throw new Error(await this.readApiError(r, '提交审核决策失败'));
         }
-        if (decision === 'accept') { this.addLog('已采纳优化结果'); alert('优化结果已采纳并保存！'); }
+        if (decision === 'accept') { this.addLog('已采纳优化结果'); this.showToast('优化结果已采纳并保存！', 'success'); }
         else if (decision === 'reject') { this.addLog('已拒绝优化结果'); this.result = null; this.view = 'setup'; }
         else if (decision === 'extend') {
           this.resetState();
@@ -947,6 +1010,13 @@ function nuwa() {
       const time = now.toLocaleTimeString('zh-CN', { hour12: false });
       this.logs.push({ time, msg });
       if (this.logs.length > 200) this.logs.splice(0, this.logs.length - 200);
+    },
+
+    showToast(msg, type = 'info') {
+      const t = { msg, type, visible: true };
+      this.toasts.push(t);
+      setTimeout(() => { t.visible = false; }, 4000);
+      setTimeout(() => { this.toasts = this.toasts.filter(x => x !== t); }, 4500);
     },
 
     startTimer() {

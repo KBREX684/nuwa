@@ -166,7 +166,7 @@ async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
     logger.info("Nuwa server shutdown complete.")
 
 
-app = FastAPI(title="Nuwa Training Dashboard", version="0.2.2", lifespan=_lifespan)
+app = FastAPI(title="Nuwa Training Dashboard", version="0.3.0", lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 # CORS — origins read from NUWA_CORS_ORIGINS (comma-separated).
@@ -319,7 +319,7 @@ def _resolve_run_log() -> RunLog:
 @app.get("/api/health")
 async def health_check() -> JSONResponse:
     """Health check endpoint for load balancers and monitoring."""
-    return JSONResponse({"status": "ok", "version": "0.2.2"})
+    return JSONResponse({"status": "ok", "version": "0.3.0"})
 
 
 @app.get("/api/status")

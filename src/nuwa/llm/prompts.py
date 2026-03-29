@@ -139,6 +139,15 @@ concrete improvements.
 {{ current_config }}
 {% endif %}
 
+## Training direction / 训练方向 (ANTI-DRIFT)
+{% if training_direction %}
+**The user's training goal is**: {{ training_direction }}
+
+Every proposed change MUST be evaluated against this training direction. If a
+change does not directly serve this goal, mark it as `"aligned": false`.
+Changes that drift away from the stated direction will be discarded.
+{% endif %}
+
 ## Analysis instructions / 分析指南
 1. **Cluster failures** by common patterns (e.g., format errors, knowledge
    gaps, instruction-following failures, language mixing).
@@ -149,6 +158,9 @@ concrete improvements.
    - Severity: low / medium / high / critical.
 3. Propose **specific, actionable changes** to prompts, configuration,
    or training data that would fix the identified issues.
+4. **Alignment check / 方向一致性检查**: For each proposed change, evaluate
+   whether it directly serves the training direction stated above. Changes
+   that do not align should still be reported but marked `"aligned": false`.
 
 ## Output format / 输出格式
 Return ONLY JSON:
@@ -169,7 +181,8 @@ Return ONLY JSON:
       "target": "system_prompt | config | training_data",
       "description_en": "...",
       "description_zh": "...",
-      "priority": "high"
+      "priority": "high",
+      "aligned": true
     }
   ]
 }
@@ -198,6 +211,15 @@ to address identified issues.
 {{ current_config }}
 ```
 
+## Training direction / 训练方向 (ANTI-DRIFT)
+{% if training_direction %}
+**The user's training goal is**: {{ training_direction }}
+
+Every mutation MUST be evaluated against this training direction. Mutations
+that do not directly serve this goal should be marked `"direction_aligned":
+false` and will be filtered out. Stay focused on the stated objective.
+{% endif %}
+
 ## Mutation guidelines / 变更指南
 - Each mutation should be **minimal and targeted** — change only what is
   necessary to fix the diagnosed issue.
@@ -208,6 +230,9 @@ to address identified issues.
   delete (with surrounding context for location).
 - For config changes, provide the JSON path and new value.
 - Explain each mutation's rationale in both English and Chinese.
+- **Direction alignment / 方向一致性**: Each mutation must include
+  `"direction_aligned": true/false` indicating whether it directly serves
+  the training direction above.
 
 ## Output format / 输出格式
 Return ONLY JSON:
@@ -225,7 +250,8 @@ Return ONLY JSON:
       "new_text": "... (for replace/insert)",
       "config_path": "... (for config_change)",
       "config_value": "... (for config_change)",
-      "expected_impact": "high | medium | low"
+      "expected_impact": "high | medium | low",
+      "direction_aligned": true
     }
   ]
 }
