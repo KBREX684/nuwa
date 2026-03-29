@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-03-29
+
+### Fixed
+
+- SSE reconnect now uses exponential backoff (max 8 retries, 30s cap) instead of silent disconnect
+- SSE keepalive uses proper SSE comment format instead of named `ping` event that was ignored by browsers
+- API error responses now pass through `ConfigError`, `ConnectorError`, `LLMError` messages verbatim instead of masking with generic text
+- Config diff display: `original_config` and `proposed_config` now included in `/api/results` and `/api/results/rounds` responses
+- Reject approval (`POST /api/approve` with `decision=reject`) now fully resets all training state
+- Default web port changed from 8080 to 9090 to avoid conflict with Docker proxy on common Linux setups
+
+### Changed
+
+- Alpine.js and ECharts bundled as local vendor files with CDN fallback for offline reliability
+- Configurable API base URL via `<meta name="api-base">` tag in index.html
+- CORS default origins updated to include both port 9090 and 8080
+- README reviewed and updated: added TOC, CI badge, 30-second demo, environment requirements, SDK example fixes, version/port corrections
+
 ## [0.2.0] - 2026-03-28
 
 ### Added

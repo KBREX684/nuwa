@@ -4,10 +4,10 @@
 
 **AI Agent Trainer — 让智能体自动进化**
 
+[![CI](https://github.com/KBREX684/nuwa/actions/workflows/ci.yml/badge.svg)](https://github.com/KBREX684/nuwa/actions)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-0.2.0-brightgreen)](https://github.com/KBREX684/nuwa/releases)
+[![Version](https://img.shields.io/badge/version-0.2.1-brightgreen)](https://github.com/KBREX684/nuwa/releases)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-101%20passed-success)](https://github.com/KBREX684/nuwa/actions)
 [![GitHub](https://img.shields.io/badge/GitHub-KBREX684%2Fnuwa-black?logo=github)](https://github.com/KBREX684/nuwa)
 
 [中文](#什么是女娲) | [English](#what-is-nuwa) | [API 文档](API.md) | [故障排查](TROUBLESHOOTING.md) | [安全策略](SECURITY.md)
@@ -16,17 +16,38 @@
 
 ---
 
-## 什么是女娲
+## 目录 / Table of Contents
+
+- [什么是女娲 / What is Nuwa](#什么是女娲--what-is-nuwa)
+- [核心特性 / Key Features](#核心特性--key-features)
+- [架构 / Architecture](#架构--architecture)
+- [快速开始 / Quick Start](#快速开始--quick-start)
+- [沙箱隔离 / Sandbox Isolation](#沙箱隔离--sandbox-isolation)
+- [配置 / Configuration](#配置--configuration)
+- [接入你的智能体 / Connecting Your Agent](#接入你的智能体--connecting-your-agent)
+- [工作原理 / How It Works](#工作原理--how-it-works)
+- [安全护栏 / Guardrails](#安全护栏--guardrails)
+- [项目结构 / Project Structure](#项目结构--project-structure)
+- [文档 / Documentation](#文档--documentation)
+- [开发 / Development](#开发--development)
+- [路线图 / Roadmap](#路线图--roadmap)
+- [许可证 / License](#许可证--license)
+
+---
+
+## 什么是女娲 / What is Nuwa
 
 女娲（Nuwa）是一个 **AI 智能体训练器**——一个用来优化其他 AI 智能体的元智能体。它通过自动化的数据集生成、执行评估、反思总结和提示词变异循环，持续优化目标智能体的 Prompt 与配置参数，无需人工反复调试。
 
 灵感来源于 [AutoResearch](https://github.com/autoresearch) 等自动化科研框架的理念：将"调优智能体"这件事本身交给智能体来完成。
 
-## What is Nuwa
+<details><summary>English</summary>
 
 Nuwa is an **AI Agent Trainer** — a meta-agent that optimizes other AI agents. It automatically generates evaluation datasets, runs your agent, scores the outputs, reflects on failure patterns, and mutates prompts and configurations to improve performance. No more manual prompt engineering.
 
 Inspired by automated research frameworks: let an agent handle the work of tuning agents.
+
+</details>
 
 ## 核心特性 / Key Features
 
@@ -85,19 +106,37 @@ Inspired by automated research frameworks: let an agent handle the work of tunin
 
 ## 快速开始 / Quick Start
 
+### 30 秒体验 / 30-Second Demo
+
+无需 API Key，直接在浏览器中体验完整训练流程：
+
+```bash
+pip install git+https://github.com/KBREX684/nuwa.git
+nuwa web
+# 浏览器打开 http://localhost:9090 → 点击「演示模式」
+```
+
+### 环境要求 / Requirements
+
+- Python 3.11+
+- 至少一个 LLM API Key（OpenAI / Anthropic / DeepSeek / Ollama 本地无需 Key）
+
 ### 安装 / Install
 
 ```bash
 # 从 GitHub 安装
 pip install git+https://github.com/KBREX684/nuwa.git
-```
 
-或克隆后本地安装：
-
-```bash
+# 或克隆后本地安装
 git clone https://github.com/KBREX684/nuwa.git
 cd nuwa
 pip install -e .
+```
+
+Web UI 需要额外依赖：
+
+```bash
+pip install 'nuwa-trainer[web]'
 ```
 
 ### 环境配置 / Environment
@@ -106,13 +145,11 @@ pip install -e .
 # 复制环境变量模板
 cp .env.example .env
 
-# 至少配置一个 LLM API Key
+# 编辑 .env，至少配置一个 LLM API Key：
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
 # DEEPSEEK_API_KEY=sk-...
 ```
-
-> **License note:** BSL 1.1 — free for development and evaluation. [Commercial license](LICENSE) required for production use.
 
 ### 交互模式 / Interactive Mode
 
@@ -133,8 +170,9 @@ import nuwa
 
 @nuwa.trainable(name="客服Bot")
 def my_agent(user_input: str, config: dict | None = None) -> str:
+    """最简示例：返回配置中的 prompt + 用户输入"""
     prompt = config.get("system_prompt", "你是助手") if config else "你是助手"
-    return call_llm(prompt, user_input)
+    return f"[{prompt}] 收到: {user_input}"
 
 result = nuwa.train_sync(
     my_agent,
@@ -152,6 +190,8 @@ print(f"最佳分数: {result.best_val_score:.3f}")
 import asyncio
 import nuwa
 
+# my_agent 通过 @nuwa.trainable 定义（见上方 SDK 示例）
+
 async def main():
     trainer = nuwa.NuwaTrainer(
         agent=my_agent,
@@ -163,9 +203,9 @@ async def main():
     result = await trainer.run()
 
     if result.best_val_score > 0.8:
-        trainer.promote()
+        trainer.promote()  # 应用最佳配置
     else:
-        trainer.discard()
+        trainer.discard()  # 保持原样
 
 asyncio.run(main())
 ```
@@ -173,7 +213,7 @@ asyncio.run(main())
 ### Web UI 控制台
 
 ```bash
-nuwa web  # http://localhost:8080
+nuwa web  # http://localhost:9090
 ```
 
 详细 API 文档请参阅 [API.md](API.md)。
@@ -219,8 +259,11 @@ train_val_split: 0.7
 overfitting_threshold: 0.15
 regression_tolerance: 0.05
 consistency_threshold: 0.8
+consistency_runs: 3
 project_dir: .nuwa
 ```
+
+> **License note:** BSL 1.1 — free for development and evaluation. [Commercial license](LICENSE) required for production use.
 
 ## 接入你的智能体 / Connecting Your Agent
 
